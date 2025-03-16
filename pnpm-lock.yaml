@@ -21,6 +21,9 @@ importers:
       '@nomicfoundation/hardhat-ethers':
         specifier: ^3.0.0
         version: 3.0.8(ethers@6.13.5)(hardhat@2.22.19(ts-node@10.9.2(@types/node@18.19.80)(typescript@5.8.2))(typescript@5.8.2))
+      '@nomicfoundation/hardhat-foundry':
+        specifier: ^1.1.3
+        version: 1.1.3(hardhat@2.22.19(ts-node@10.9.2(@types/node@18.19.80)(typescript@5.8.2))(typescript@5.8.2))
       '@nomicfoundation/hardhat-network-helpers':
         specifier: ^1.0.6
         version: 1.0.12(hardhat@2.22.19(ts-node@10.9.2(@types/node@18.19.80)(typescript@5.8.2))(typescript@5.8.2))
@@ -528,6 +531,11 @@ packages:
     peerDependencies:
       ethers: ^6.1.0
       hardhat: ^2.0.0
+
+  '@nomicfoundation/hardhat-foundry@1.1.3':
+    resolution: {integrity: sha512-30Ezc3hlZ4pC5Z/9W9euW5uoPKKQQKaecLETHJH8BPpd30zYOooy6HfjmcTY1/taOQjlwirOdNO7tHlje8Qcgw==}
+    peerDependencies:
+      hardhat: ^2.17.2
 
   '@nomicfoundation/hardhat-ignition-ethers@0.15.10':
     resolution: {integrity: sha512-P90glRiBbR4mnMKP/LePovfUJjYT2YWJjx7118i7yxssUwcaW9wFohb4bFh+236N1tqM4q7aGx9cBvHNgve3zA==}
@@ -3848,6 +3856,11 @@ snapshots:
       lodash.isequal: 4.5.0
     transitivePeerDependencies:
       - supports-color
+
+  '@nomicfoundation/hardhat-foundry@1.1.3(hardhat@2.22.19(ts-node@10.9.2(@types/node@18.19.80)(typescript@5.8.2))(typescript@5.8.2))':
+    dependencies:
+      hardhat: 2.22.19(ts-node@10.9.2(@types/node@18.19.80)(typescript@5.8.2))(typescript@5.8.2)
+      picocolors: 1.1.1
 
   '@nomicfoundation/hardhat-ignition-ethers@0.15.10(@nomicfoundation/hardhat-ethers@3.0.8(ethers@6.13.5)(hardhat@2.22.19(ts-node@10.9.2(@types/node@18.19.80)(typescript@5.8.2))(typescript@5.8.2)))(@nomicfoundation/hardhat-ignition@0.15.10(@nomicfoundation/hardhat-verify@2.0.13(hardhat@2.22.19(ts-node@10.9.2(@types/node@18.19.80)(typescript@5.8.2))(typescript@5.8.2)))(hardhat@2.22.19(ts-node@10.9.2(@types/node@18.19.80)(typescript@5.8.2))(typescript@5.8.2)))(@nomicfoundation/ignition-core@0.15.10)(ethers@6.13.5)(hardhat@2.22.19(ts-node@10.9.2(@types/node@18.19.80)(typescript@5.8.2))(typescript@5.8.2))':
     dependencies:
