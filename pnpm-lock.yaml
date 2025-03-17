@@ -11,6 +11,9 @@ importers:
       '@openzeppelin/contracts':
         specifier: ^5.0.2
         version: 5.2.0
+      better-sqlite3:
+        specifier: ^11.9.0
+        version: 11.9.0
     devDependencies:
       '@eslint/js':
         specifier: ^9.9.0
@@ -144,9 +147,6 @@ importers:
       solidity-coverage:
         specifier: 0.8.12
         version: 0.8.12(hardhat@2.22.19(ts-node@10.9.2(@types/node@18.19.80)(typescript@5.8.2))(typescript@5.8.2))
-      sqlite3:
-        specifier: ^5.1.7
-        version: 5.1.7
       ts-generator:
         specifier: ^0.1.1
         version: 0.1.1
@@ -1025,6 +1025,9 @@ packages:
 
   bech32@1.1.4:
     resolution: {integrity: sha512-s0IrSOzLlbvX7yp4WBfPITzpAU8sqQcpsmwXDiKwrG4r491vwCO/XpejasRNl0piBMe/DvP4Tz0mIS/X1DPJBQ==}
+
+  better-sqlite3@11.9.0:
+    resolution: {integrity: sha512-4b9xYnoaskj8eIkke9ZCB42p5bOPabptSku8Rl4Yww70Jf+aHeLvrIjXDJrKQxUEjdppsFb+fdJSjoH4TklROA==}
 
   bigint-buffer@1.1.5:
     resolution: {integrity: sha512-trfYco6AoZ+rKhKnxA0hgX0HAbVP/s808/EuDSe2JDzUnCp/xAsli35Orvk67UrTEcwuxZqYZDmfA2RXJgxVvA==}
@@ -4430,6 +4433,11 @@ snapshots:
   base64-js@1.5.1: {}
 
   bech32@1.1.4: {}
+
+  better-sqlite3@11.9.0:
+    dependencies:
+      bindings: 1.5.0
+      prebuild-install: 7.1.3
 
   bigint-buffer@1.1.5:
     dependencies:

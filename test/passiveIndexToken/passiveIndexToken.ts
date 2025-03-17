@@ -5,16 +5,16 @@ import { createInstance } from "../instance";
 import { reencryptEuint64 } from "../reencrypt";
 import { getSigners, initSigners } from "../signers";
 import { debug } from "../utils";
-import { deployConfidentialERC20Fixture } from "./ConfidentialERC20.fixture";
+import { deployPassiveIndexTokenFixture } from "./passiveIndexToken.fixture";
 
-describe("ConfidentialERC20", function () {
+describe("PassiveIndexToken", function () {
   before(async function () {
     await initSigners();
     this.signers = await getSigners();
   });
 
   beforeEach(async function () {
-    const contract = await deployConfidentialERC20Fixture();
+    const contract = await deployPassiveIndexTokenFixture();
     this.contractAddress = await contract.getAddress();
     this.erc20 = contract;
     this.fhevm = await createInstance();

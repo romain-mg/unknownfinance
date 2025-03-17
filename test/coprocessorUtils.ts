@@ -11,7 +11,6 @@ const executorAddress = TFHEEXECUTOR_ADDRESS;
 let firstBlockListening = 0;
 let lastBlockSnapshot = 0;
 let lastCounterRand = 0;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let counterRand = 0;
 
 //const db = new Database('./sql.db'); // on-disk db for debugging
@@ -185,7 +184,7 @@ async function processAllPastTFHEExecutorEvents() {
           eventName: parsedLog.name,
           args: parsedLog.args,
         };
-      } catch {
+      } catch (e) {
         // If the log cannot be parsed, skip it
         return null;
       }
@@ -564,7 +563,7 @@ async function insertHandleFromEvent(event: FHEVMEvent) {
       }
       break;
 
-    case "FheIfThenElse": {
+    case "FheIfThenElse":
       handle = ethers.toBeHex(event.args[3], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
       handle = ethers.toBeHex(event.args[3], 32);
@@ -578,7 +577,6 @@ async function insertHandleFromEvent(event: FHEVMEvent) {
       }
       insertSQL(handle, clearText);
       break;
-    }
 
     case "FheRand":
       resultType = parseInt(event.args[0], 16);
@@ -783,7 +781,6 @@ export function getFHEGasFromTxReceipt(receipt: ethers.TransactionReceipt): numb
         } else {
           FHEGasConsumed += operatorPrices["fheEq"].nonScalar[type];
         }
-        break;
 
       case "FheNe":
         handle = ethers.toBeHex(event.args[0], 32);

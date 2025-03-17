@@ -110,7 +110,7 @@ const config: HardhatUserConfig = {
     tests: "./test",
   },
   solidity: {
-    version: "0.8.24",
+    version: "0.8.26",
     settings: {
       metadata: {
         // Not including the metadata hash
@@ -124,6 +124,7 @@ const config: HardhatUserConfig = {
         runs: 800,
       },
       evmVersion: "cancun",
+      viaIR: true,
     },
   },
   etherscan: {

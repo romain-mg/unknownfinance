@@ -4,16 +4,16 @@ import { network } from "hardhat";
 import { getFHEGasFromTxReceipt } from "../coprocessorUtils";
 import { createInstance } from "../instance";
 import { getSigners, initSigners } from "../signers";
-import { deployConfidentialERC20Fixture } from "./ConfidentialERC20.fixture";
+import { deployPassiveIndexTokenFixture } from "./passiveIndexToken.fixture";
 
-describe("ConfidentialERC20:FHEGas", function () {
+describe("PassiveIndexToken:FHEGas", function () {
   before(async function () {
     await initSigners();
     this.signers = await getSigners();
   });
 
   beforeEach(async function () {
-    const contract = await deployConfidentialERC20Fixture();
+    const contract = await deployPassiveIndexTokenFixture();
     this.contractAddress = await contract.getAddress();
     this.erc20 = contract;
     this.fhevm = await createInstance();
