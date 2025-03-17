@@ -20,7 +20,6 @@ extendProvider(async (provider) => {
 });
 
 dotenv.config();
-
 // Ensure that we have all the environment variables we need.
 const mnemonic: string = process.env.MNEMONIC!;
 
@@ -44,16 +43,24 @@ function getChainConfig(chain: keyof typeof chainIds): NetworkUserConfig {
       jsonRpcUrl = "https://devnet.zama.ai";
       break;
     case "sepolia":
-      jsonRpcUrl = process.env.SEPOLIA_RPC_URL || "https://sepolia.infura.io/v3/YOUR-PROJECT-ID";
+      jsonRpcUrl = process.env.SEPOLIA_RPC_URL!;
       break;
     default:
       jsonRpcUrl = "http://localhost:8545";
   }
+
+  // Make sure mnemonic is properly defined before using it
+  if (!mnemonic) {
+    throw new Error("Missing MNEMONIC environment variable");
+  }
+
   return {
     accounts: {
+      mnemonic: mnemonic, // Explicit assignment with property name
+      initialIndex: 0,
       count: 10,
-      mnemonic,
       path: "m/44'/60'/0'/0",
+      passphrase: "",
     },
     chainId: chainIds[chain],
     url: jsonRpcUrl,
@@ -92,12 +99,24 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       accounts: {
+        mnemonic: mnemonic,
+        initialIndex: 0,
         count: 10,
-        mnemonic,
         path: "m/44'/60'/0'/0",
+        passphrase: "",
       },
     },
-    sepolia: getChainConfig("sepolia"),
+    sepolia: {
+      accounts: {
+        mnemonic: mnemonic,
+        initialIndex: 0,
+        count: 10,
+        path: "m/44'/60'/0'/0",
+        passphrase: "",
+      },
+      chainId: chainIds["sepolia"],
+      url: process.env.SEPOLIA_RPC_URL,
+    },
     zama: getChainConfig("zama"),
     localDev: getChainConfig("local"),
     local: getChainConfig("local"),

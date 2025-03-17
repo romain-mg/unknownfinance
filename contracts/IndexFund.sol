@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract IndexFund {
     address[] indexTokens;
 
-    address passiveIndexToken;
+    address IndexFundToken;
 
     address stablecoin;
 
@@ -16,9 +16,9 @@ contract IndexFund {
 
     event SharesBurned(address indexed user, uint256 indexed amount);
 
-    constructor(address[] memory _indexTokens, address _passiveIndexToken, address _stablecoin) {
+    constructor(address[] memory _indexTokens, address _IndexFundToken, address _stablecoin) {
         indexTokens = _indexTokens;
-        passiveIndexToken = _passiveIndexToken;
+        IndexFundToken = _IndexFundToken;
         stablecoin = _stablecoin;
     }
 
@@ -30,8 +30,8 @@ contract IndexFund {
         return indexTokens;
     }
 
-    function getPassiveIndexToken() public view returns (address) {
-        return passiveIndexToken;
+    function getIndexFundToken() public view returns (address) {
+        return IndexFundToken;
     }
 
     function getStablecoin() public view returns (address) {

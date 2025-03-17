@@ -3,7 +3,7 @@ import { ethers } from "hardhat";
 import type { ERC20EncryptionWrapper, TestErc20 } from "../../types";
 import { getSigners } from "../signers";
 
-export async function deployConfidentialERC20WrapperFixture(
+export async function deployERC20EncryptionWrapperFixture(
   name: string,
   symbol: string,
   _underlyingERC20: TestErc20,

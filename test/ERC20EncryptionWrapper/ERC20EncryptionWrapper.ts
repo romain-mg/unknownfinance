@@ -4,10 +4,10 @@ import { createInstance } from "../instance";
 import { reencryptEuint64 } from "../reencrypt";
 import { getSigners, initSigners } from "../signers";
 import { debug } from "../utils";
-import { deployConfidentialERC20WrapperFixture } from "./confidentialERC20Wrapper.fixture";
+import { deployERC20EncryptionWrapperFixture } from "./ERC20EncryptionWrapper.fixture";
 import { deployERC20Fixture } from "./testERC20.fixture";
 
-describe("PassiveIndexToken", function () {
+describe("ConfidentialERC20Wrapper", function () {
   before(async function () {
     await initSigners();
     this.signers = await getSigners();
@@ -15,7 +15,7 @@ describe("PassiveIndexToken", function () {
 
   beforeEach(async function () {
     const erc20 = await deployERC20Fixture("ERC20", "ERC20");
-    const wrapperContract = await deployConfidentialERC20WrapperFixture("ConfidentialERC20Wrapper", "CERC20", erc20);
+    const wrapperContract = await deployERC20EncryptionWrapperFixture("ConfidentialERC20Wrapper", "CERC20", erc20);
     this.wrapperContractAddress = await wrapperContract.getAddress();
     this.erc20 = erc20;
     this.wrapperContract = wrapperContract;
