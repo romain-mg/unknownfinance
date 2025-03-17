@@ -17,15 +17,34 @@ contract MarketDataFetcher is Initializable, UUPSUpgradeable, OwnableUpgradeable
     IPoolManager public poolManager;
     uint256 public ETH_TOTAL_SUPPLY = 120_450_000;
     uint256 public BTC_TOTAL_SUPPLY = 21_000_000;
+
+    function setETHTotalSupply(uint256 _ethTotalSupply) external onlyOwner {
+        ETH_TOTAL_SUPPLY = _ethTotalSupply;
+    }
+
+    function setBTCTotalSupply(uint256 _BTCTotalSupply) external onlyOwner {
+        BTC_TOTAL_SUPPLY = _BTCTotalSupply;
+    }
+
     function initialize(address _poolManager) public initializer {
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
         poolManager = IPoolManager(_poolManager);
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function getIndexMarketCap(
+        address[] calldata indexTokenAddresses,
+        PoolKey[] calldata keys
+    ) public view returns (uint256) {
+        require(indexTokenAddresses.length == keys.length, "Missing token addresses or keys");
+        uint256 totalMarketCap = 0;
+        for (uint i = 0; i < indexTokenAddresses.length; i++) {
+            totalMarketCap += getTokenMarketCap(indexTokenAddresses[i], keys[i]);
+        }
+        return totalMarketCap;
+    }
 
-    function getTokenMarketCap(address token, PoolKey calldata key) internal view returns (uint256) {
+    function getTokenMarketCap(address token, PoolKey calldata key) public view returns (uint256) {
         uint256 price = getPoolPrice(key);
         uint256 totalSupply = _getTokenTotalSupply(token);
         return price * totalSupply;
@@ -35,6 +54,10 @@ contract MarketDataFetcher is Initializable, UUPSUpgradeable, OwnableUpgradeable
         (uint160 sqrtPriceX96, , , ) = poolManager.getSlot0(key.toId());
         price = (uint256(sqrtPriceX96) ** 2) / (2 ** 96);
         return price;
+    }
+
+    function compareStrings(string memory a, string memory b) public pure returns (bool) {
+        return (keccak256(abi.encodePacked((a))) == keccak256(abi.encodePacked((b))));
     }
 
     function _getTokenTotalSupply(address token) internal view returns (uint256) {
@@ -47,15 +70,5 @@ contract MarketDataFetcher is Initializable, UUPSUpgradeable, OwnableUpgradeable
         return ERC20(token).totalSupply();
     }
 
-    function setETHTotalSupply(uint256 _ethTotalSupply) external onlyOwner {
-        ETH_TOTAL_SUPPLY = _ethTotalSupply;
-    }
-
-    function setBTCTotalSupply(uint256 _BTCTotalSupply) external onlyOwner {
-        BTC_TOTAL_SUPPLY = _BTCTotalSupply;
-    }
-
-    function compareStrings(string memory a, string memory b) public pure returns (bool) {
-        return (keccak256(abi.encodePacked((a))) == keccak256(abi.encodePacked((b))));
-    }
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 }

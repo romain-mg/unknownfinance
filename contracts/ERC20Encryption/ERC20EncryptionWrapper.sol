@@ -12,6 +12,11 @@ contract ERC20EncryptionWrapper is SepoliaZamaFHEVMConfig, ConfidentialERC20Mint
 
     event Burn(address indexed to, uint64 amount);
 
+    /**
+     * @dev The underlying token couldn't be wrapped.
+     */
+    error ERC20InvalidUnderlying(address token);
+
     constructor(
         string memory _name,
         string memory _symbol,
@@ -24,32 +29,9 @@ contract ERC20EncryptionWrapper is SepoliaZamaFHEVMConfig, ConfidentialERC20Mint
     }
 
     /**
-     * @dev The underlying token couldn't be wrapped.
-     */
-    error ERC20InvalidUnderlying(address token);
-
-    /**
-     * @dev See {ERC20-decimals}.
-     */
-    function decimals() public view virtual override returns (uint8) {
-        try IERC20Metadata(address(_underlying)).decimals() returns (uint8 value) {
-            return value;
-        } catch {
-            return super.decimals();
-        }
-    }
-
-    /**
-     * @dev Returns the address of the underlying ERC-20 token that is being wrapped.
-     */
-    function underlying() public view returns (IERC20) {
-        return _underlying;
-    }
-
-    /**
      * @dev Allow a user to deposit underlying tokens and mint the corresponding number of wrapped tokens.
      */
-    function depositFor(address account, uint256 value) public virtual returns (bool) {
+    function depositFor(address account, uint256 value) public returns (bool) {
         address sender = _msgSender();
         if (sender == address(this)) {
             revert ERC20InvalidSender(address(this));
@@ -65,7 +47,7 @@ contract ERC20EncryptionWrapper is SepoliaZamaFHEVMConfig, ConfidentialERC20Mint
     /**
      * @dev Allow a user to burn a number of wrapped tokens and withdraw the corresponding number of underlying tokens.
      */
-    function withdrawTo(address account, uint256 value) public virtual returns (bool) {
+    function withdrawTo(address account, uint256 value) public returns (bool) {
         if (account == address(this)) {
             revert ERC20InvalidReceiver(account);
         }
@@ -75,16 +57,34 @@ contract ERC20EncryptionWrapper is SepoliaZamaFHEVMConfig, ConfidentialERC20Mint
     }
 
     /**
+     * @dev See {ERC20-decimals}.
+     */
+    function decimals() public view override returns (uint8) {
+        try IERC20Metadata(address(_underlying)).decimals() returns (uint8 value) {
+            return value;
+        } catch {
+            return super.decimals();
+        }
+    }
+
+    /**
+     * @dev Returns the address of the underlying ERC-20 token that is being wrapped.
+     */
+    function underlying() public view returns (IERC20) {
+        return _underlying;
+    }
+
+    /**
      * @dev Mint wrapped token to cover any underlyingTokens that would have been transferred by mistake or acquired from
      * rebasing mechanisms. Internal function that can be exposed with access control if desired.
      */
-    function _recover(address account) internal virtual returns (uint256) {
+    function _recover(address account) internal returns (uint256) {
         uint256 value = _underlying.balanceOf(address(this)) - totalSupply();
         mint(account, uint64(value));
         return value;
     }
 
-    function _unsafeBurn(address account, uint64 amount) internal virtual {
+    function _unsafeBurn(address account, uint64 amount) internal {
         _unsafeBurnNoEvent(account, amount);
         emit Transfer(account, address(0), _PLACEHOLDER);
     }
@@ -93,7 +93,7 @@ contract ERC20EncryptionWrapper is SepoliaZamaFHEVMConfig, ConfidentialERC20Mint
      * @dev It does not incorporate any overflow check. It must be implemented
      *      by the function calling it.
      */
-    function _unsafeBurnNoEvent(address account, uint64 amount) internal virtual {
+    function _unsafeBurnNoEvent(address account, uint64 amount) internal {
         euint64 newBalanceAccount = TFHE.sub(_balances[account], amount);
         _balances[account] = newBalanceAccount;
         TFHE.allowThis(newBalanceAccount);

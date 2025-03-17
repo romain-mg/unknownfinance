@@ -22,15 +22,6 @@ contract SwapsManager is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     IPoolManager public poolManager;
     IPermit2 public permit2;
 
-    function initialize(address _router, address _poolManager, address _permit2) public initializer {
-        __Ownable_init(msg.sender);
-        __UUPSUpgradeable_init();
-        router = UniversalRouter(payable(_router));
-        poolManager = IPoolManager(_poolManager);
-        permit2 = IPermit2(_permit2);
-    }
-
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
     function approveTokenWithPermit2(address token, uint160 amount, uint48 expiration) external {
         IERC20(token).approve(address(permit2), type(uint256).max);
         permit2.approve(token, address(router), amount, expiration);
@@ -78,6 +69,16 @@ contract SwapsManager is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         require(amountOut >= minAmountOut, "Insufficient output amount");
         return amountOut;
     }
+
+    function initialize(address _router, address _poolManager, address _permit2) public initializer {
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
+        router = UniversalRouter(payable(_router));
+        poolManager = IPoolManager(_poolManager);
+        permit2 = IPermit2(_permit2);
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     function toAddress(Currency currency) internal pure returns (address) {
         return Currency.unwrap(currency);
