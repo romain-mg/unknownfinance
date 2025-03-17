@@ -2,15 +2,17 @@
 
 pragma solidity 0.8.26;
 
-import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import { IPoolManager } from "v4-core/src/interfaces/IPoolManager.sol";
-import { PoolKey } from "v4-core/src/types/PoolKey.sol";
-import { PoolId, PoolIdLibrary } from "v4-core/src/types/PoolId.sol";
-import { StateLibrary } from "v4-core/src/libraries/StateLibrary.sol";
+import { UUPSUpgradeable } from "@openzeppelin-contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import { OwnableUpgradeable } from "@openzeppelin-contracts-upgradeable/access/OwnableUpgradeable.sol";
+import { Initializable } from "@openzeppelin-contracts-upgradeable/proxy/utils/Initializable.sol";
+import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
+import { PoolId, PoolIdLibrary } from "@uniswap/v4-core/src/types/PoolId.sol";
+import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-contract MarketDataFetcher is Initializable, UUPSUpgradeable, OwnableUpgradeable {
+import { IMarketDataFetcher } from "../interfaces/IMarketDataFetcher.sol";
+
+contract MarketDataFetcher is Initializable, UUPSUpgradeable, OwnableUpgradeable, IMarketDataFetcher {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
 

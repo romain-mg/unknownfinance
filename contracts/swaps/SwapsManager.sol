@@ -7,17 +7,16 @@ import { Commands } from "@uniswap/universal-router/contracts/libraries/Commands
 import { IV4Router } from "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
 import { Actions } from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import { IPermit2 } from "permit2/src/interfaces/IPermit2.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import { IERC20 } from "@openzeppelin-contracts/token/ERC20/IERC20.sol";
+import { UUPSUpgradeable } from "@openzeppelin-contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import { OwnableUpgradeable } from "@openzeppelin-contracts-upgradeable/access/OwnableUpgradeable.sol";
+import { Initializable } from "@openzeppelin-contracts-upgradeable/proxy/utils/Initializable.sol";
 import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import { PoolKey, Currency } from "@uniswap/v4-core/src/types/PoolKey.sol";
+import { ISwapsManager } from "../interfaces/ISwapsManager.sol";
 
-contract SwapsManager is Initializable, UUPSUpgradeable, OwnableUpgradeable {
-    using StateLibrary for IPoolManager;
-
+contract SwapsManager is Initializable, UUPSUpgradeable, OwnableUpgradeable, ISwapsManager {
     UniversalRouter public router;
     IPoolManager public poolManager;
     IPermit2 public permit2;
