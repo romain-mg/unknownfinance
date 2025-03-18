@@ -1,22 +1,20 @@
 // SPDX-License-Identifier: MIT
-pragma solidity =0.8.26;
+pragma solidity 0.8.26;
 
-import "./swaps/SwapsManager.sol";
-import "./IndexFundToken.sol";
-import "./marketData/MarketDataFetcher.sol";
-import "@openzeppelin-contracts/token/ERC20/IERC20.sol";
-import "./interfaces/IIndexFund.sol";
-import "./interfaces/ISwapsManager.sol";
-import "./interfaces/IMarketDataFetcher.sol";
+import { IIndexFund } from "./interfaces/IIndexFund.sol";
+import { IndexFundToken } from "./IndexFundToken.sol";
+import { IERC20 } from "@openzeppelin-contracts/token/ERC20/IERC20.sol";
+import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
 
 contract IndexFund is IIndexFund {
     address[] indexTokens;
+    PoolKey[] poolKeys;
 
     IERC20 indexFundToken;
 
-    IMarketDataFetcher marketDataFetcher;
+    address marketDataFetcherProxy;
 
-    ISwapsManager swapsManager;
+    address swapsManagerProxy;
 
     IERC20 stablecoin;
 
@@ -34,15 +32,15 @@ contract IndexFund is IIndexFund {
         address[] memory _indexTokens,
         address _stablecoin,
         address _indexFundToken,
-        address _marketDataFetcher,
-        address _swapsManager,
+        address _marketDataFetcherProxy,
+        address _swapsManagerProxy,
         uint256 _initialSharePrice
     ) {
         indexTokens = _indexTokens;
         stablecoin = IERC20(_stablecoin);
         indexFundToken = IERC20(_indexFundToken);
-        marketDataFetcher = IMarketDataFetcher(_marketDataFetcher);
-        swapsManager = ISwapsManager(_swapsManager);
+        marketDataFetcherProxy = _marketDataFetcherProxy;
+        swapsManagerProxy = _swapsManagerProxy;
         sharePrice = _initialSharePrice;
     }
 
@@ -61,4 +59,6 @@ contract IndexFund is IIndexFund {
     function getStablecoin() public view returns (IERC20) {
         return stablecoin;
     }
+
+    function getPoolKeysFromIndexTokens() public view returns (PoolKey[] memory) {}
 }
