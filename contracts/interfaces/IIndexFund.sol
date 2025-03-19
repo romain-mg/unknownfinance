@@ -4,6 +4,8 @@ pragma solidity 0.8.26;
 import "@openzeppelin-contracts/token/ERC20/IERC20.sol";
 
 interface IIndexFund {
+    error InsufficientAllowance(address token);
+
     function mintShares(uint256 amount) external;
 
     function burnShares(uint256 amount) external;

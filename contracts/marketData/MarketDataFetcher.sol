@@ -34,16 +34,18 @@ contract MarketDataFetcher is Initializable, UUPSUpgradeable, OwnableUpgradeable
         poolManager = IPoolManager(_poolManager);
     }
 
-    function getIndexMarketCap(
+    function getIndexMarketCaps(
         address[] calldata indexTokenAddresses,
         PoolKey[] calldata keys
-    ) public view returns (uint256) {
+    ) public view returns (uint256 totalMarketCap, uint256[] memory marketCaps) {
         require(indexTokenAddresses.length == keys.length, "Missing token addresses or keys");
-        uint256 totalMarketCap = 0;
+        totalMarketCap = 0;
+        marketCaps = new uint256[](indexTokenAddresses.length);
         for (uint i = 0; i < indexTokenAddresses.length; i++) {
             totalMarketCap += getTokenMarketCap(indexTokenAddresses[i], keys[i]);
+            marketCaps[i] = getTokenMarketCap(indexTokenAddresses[i], keys[i]);
         }
-        return totalMarketCap;
+        return (totalMarketCap, marketCaps);
     }
 
     function getTokenMarketCap(address token, PoolKey calldata key) public view returns (uint256) {

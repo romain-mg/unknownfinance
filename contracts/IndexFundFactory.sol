@@ -25,14 +25,18 @@ contract IndexFuncFactory is IIndexFundFactory, Ownable {
 
     uint256 defaultSharePrice;
 
+    uint256 feeDivisor;
+
     constructor(
         address _swapsManagerProxy,
         address _markerDataFetcherProxy,
-        uint256 _defaultSharePrice
+        uint256 _defaultSharePrice,
+        uint256 _feeDivisor
     ) Ownable(msg.sender) {
         swapsManagerProxy = _swapsManager;
         marketDataFetcherProxy = _markerDataFetcher;
         defaultSharePrice = _defaultSharePrice;
+        feeDivisor = _feeDivisor;
     }
     /**
      * @notice Create a new index fund
@@ -64,7 +68,8 @@ contract IndexFuncFactory is IIndexFundFactory, Ownable {
             newIndexFundToken,
             marketDataFetcher,
             swapsManager,
-            defaultSharePrice
+            defaultSharePrice,
+            owner()
         );
         tokensAndStablecoinToIndexFund[indexFundKey] = indexFund;
         return address(indexFund);
@@ -121,5 +126,13 @@ contract IndexFuncFactory is IIndexFundFactory, Ownable {
      */
     function removeWhitelistedTokenStablecoinPair(address token) external onlyOwner {
         delete tokenStablecoinPairToPoolKey[keccak256(abi.encodePacked(token, stablecoin))];
+    }
+
+    /**
+     * @notice Set the fee divisor for new index funds
+     * @param newFeeDivisor The new fee divisor
+     */
+    function setFeeDivisor(uint256 newFeeDivisor) external onlyOwner {
+        feeDivisor = newFeeDivisor;
     }
 }

@@ -31,7 +31,7 @@ contract SwapsManager is Initializable, UUPSUpgradeable, OwnableUpgradeable, ISw
         uint128 amountIn,
         uint128 minAmountOut,
         uint256 deadline
-    ) external returns (uint256 amountOut) {
+    ) internal returns (uint256 amountOut) {
         // Encode the Universal Router command
         bytes memory commands = abi.encodePacked(uint8(Commands.V4_SWAP));
         bytes[] memory inputs = new bytes[](1);
@@ -63,9 +63,11 @@ contract SwapsManager is Initializable, UUPSUpgradeable, OwnableUpgradeable, ISw
         // Execute the swap
         router.execute(commands, inputs, deadline);
 
-        // Verify and return the output amount
-        amountOut = IERC20(toAddress(key.currency1)).balanceOf(address(this));
+        // Verify and return the output amount to thhe caller
+        amountOut = IERC20(currencyToAddress(key.currency1)).balanceOf(address(this));
         require(amountOut >= minAmountOut, "Insufficient output amount");
+        bool success = IERC20(currencyToAddress(key.currency1)).transfer(msg.sender, amountOut);
+        if (!success) revert SwapOutputTransferFailed(msg.sender, IERC20(currencyToAddress(key.currency1)), amountOut);
         return amountOut;
     }
 
@@ -79,7 +81,7 @@ contract SwapsManager is Initializable, UUPSUpgradeable, OwnableUpgradeable, ISw
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    function toAddress(Currency currency) internal pure returns (address) {
+    function currencyToAddress(Currency currency) internal pure returns (address) {
         return Currency.unwrap(currency);
     }
 }
