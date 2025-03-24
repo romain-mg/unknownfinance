@@ -11,4 +11,6 @@ interface IMarketDataFetcher {
     ) external view returns (uint256 totalMarketCap, uint256[] memory marketCaps);
 
     function getTokenMarketCap(address token, PoolKey calldata key) external view returns (uint256);
+
+    function getTokenPrice(address token, PoolKey calldata key) external view returns (uint256);
 }

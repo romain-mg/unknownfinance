@@ -96,6 +96,7 @@
   "dependencies": {
     "@openzeppelin/contracts": "^5.0.2",
     "better-sqlite3": "^11.9.0",
+    "bigint-buffer": "^1.1.5",
     "sqlite3": "^5.1.7"
   }
 }
