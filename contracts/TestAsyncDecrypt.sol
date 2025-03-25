@@ -95,13 +95,8 @@ contract TestAsyncDecrypt is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, G
         uint256[] memory cts = new uint256[](1);
         cts[0] = Gateway.toUint256(xBool);
         /// @dev Request decryption with a 100-second deadline and trustless mode (true)
-        uint256 requestID = Gateway.requestDecryption(
-            cts,
-            this.callbackBoolTrustless.selector,
-            0,
-            block.timestamp + 100,
-            true
-        );
+        uint256 requestID =
+            Gateway.requestDecryption(cts, this.callbackBoolTrustless.selector, 0, block.timestamp + 100, true);
         latestRequestID = requestID;
         /// @dev Save the requested handles for later verification
         saveRequestedHandles(requestID, cts);
@@ -114,11 +109,11 @@ contract TestAsyncDecrypt is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, G
     }
 
     /// @notice Callback function for trustless boolean decryption
-    function callbackBoolTrustless(
-        uint256 requestID,
-        bool decryptedInput,
-        bytes[] memory signatures
-    ) public onlyGateway returns (bool) {
+    function callbackBoolTrustless(uint256 requestID, bool decryptedInput, bytes[] memory signatures)
+        public
+        onlyGateway
+        returns (bool)
+    {
         /// @dev Verify that the requestID matches the latest request
         require(latestRequestID == requestID, "wrong requestID passed by Gateway");
         /// @dev Load the previously saved handles for verification
@@ -182,13 +177,8 @@ contract TestAsyncDecrypt is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, G
     function requestUint32(uint32 input1, uint32 input2) public {
         uint256[] memory cts = new uint256[](1);
         cts[0] = Gateway.toUint256(xUint32);
-        uint256 requestID = Gateway.requestDecryption(
-            cts,
-            this.callbackUint32.selector,
-            0,
-            block.timestamp + 100,
-            false
-        );
+        uint256 requestID =
+            Gateway.requestDecryption(cts, this.callbackUint32.selector, 0, block.timestamp + 100, false);
         addParamsUint256(requestID, input1);
         addParamsUint256(requestID, input2);
     }
@@ -346,11 +336,11 @@ contract TestAsyncDecrypt is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, G
     /// @param decryptedInput1 The first decrypted address
     /// @param decryptedInput2 The second decrypted address
     /// @return The first decrypted address
-    function callbackAddresses(
-        uint256 /*requestID*/,
-        address decryptedInput1,
-        address decryptedInput2
-    ) public onlyGateway returns (address) {
+    function callbackAddresses(uint256, /*requestID*/ address decryptedInput1, address decryptedInput2)
+        public
+        onlyGateway
+        returns (address)
+    {
         yAddress = decryptedInput1;
         yAddress2 = decryptedInput2;
         return decryptedInput1;
@@ -380,13 +370,7 @@ contract TestAsyncDecrypt is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, G
         cts[7] = Gateway.toUint256(xUint64);
         cts[8] = Gateway.toUint256(xUint64);
         cts[9] = Gateway.toUint256(xAddress);
-        uint256 requestID = Gateway.requestDecryption(
-            cts,
-            this.callbackMixed.selector,
-            0,
-            block.timestamp + 100,
-            false
-        );
+        uint256 requestID = Gateway.requestDecryption(cts, this.callbackMixed.selector, 0, block.timestamp + 100, false);
         addParamsUint256(requestID, input1);
         addParamsUint256(requestID, input2);
     }
@@ -475,13 +459,8 @@ contract TestAsyncDecrypt is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, G
         ebytes256 inputNonTrivial = TFHE.asEbytes256(inputHandle, inputProof);
         uint256[] memory cts = new uint256[](1);
         cts[0] = Gateway.toUint256(inputNonTrivial);
-        uint256 requestID = Gateway.requestDecryption(
-            cts,
-            this.callbackBytes256Trustless.selector,
-            0,
-            block.timestamp + 100,
-            true
-        );
+        uint256 requestID =
+            Gateway.requestDecryption(cts, this.callbackBytes256Trustless.selector, 0, block.timestamp + 100, true);
         latestRequestID = requestID;
         saveRequestedHandles(requestID, cts);
     }
@@ -492,11 +471,11 @@ contract TestAsyncDecrypt is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, G
     /// @param decryptedInput The decrypted bytes256 value
     /// @param signatures The signatures from the KMS for verification
     /// @return The decrypted bytes256 value
-    function callbackBytes256Trustless(
-        uint256 requestID,
-        bytes calldata decryptedInput,
-        bytes[] memory signatures
-    ) public onlyGateway returns (bytes memory) {
+    function callbackBytes256Trustless(uint256 requestID, bytes calldata decryptedInput, bytes[] memory signatures)
+        public
+        onlyGateway
+        returns (bytes memory)
+    {
         require(latestRequestID == requestID, "wrong requestID passed by Gateway");
         uint256[] memory requestedHandles = loadRequestedHandles(latestRequestID);
         bool isKMSVerified = Gateway.verifySignatures(requestedHandles, signatures);
@@ -515,13 +494,8 @@ contract TestAsyncDecrypt is SepoliaZamaFHEVMConfig, SepoliaZamaGatewayConfig, G
         cts[0] = Gateway.toUint256(xBool);
         cts[1] = Gateway.toUint256(xBytes256);
         cts[2] = Gateway.toUint256(xAddress);
-        uint256 requestID = Gateway.requestDecryption(
-            cts,
-            this.callbackMixedBytes256Trustless.selector,
-            0,
-            block.timestamp + 100,
-            true
-        );
+        uint256 requestID =
+            Gateway.requestDecryption(cts, this.callbackMixedBytes256Trustless.selector, 0, block.timestamp + 100, true);
         latestRequestID = requestID;
         saveRequestedHandles(requestID, cts);
     }

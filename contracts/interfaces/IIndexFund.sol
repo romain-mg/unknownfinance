@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 
 pragma solidity 0.8.26;
+
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../IndexFundToken.sol";
 
@@ -10,6 +11,8 @@ interface IIndexFund {
     error SharesToMintAmountTooBig(uint256 amountToMint);
 
     error AmountToSwapTooBig(uint256 amountToSwap);
+
+    error TransferFailed(address from, address to, address token, uint256 amount);
 
     function mintShares(uint256 amount) external;
 

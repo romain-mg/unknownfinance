@@ -2,15 +2,15 @@
 
 pragma solidity 0.8.26;
 
-import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import { PoolKey, Currency } from "@uniswap/v4-core/src/types/PoolKey.sol";
-import { PoolId, PoolIdLibrary } from "@uniswap/v4-core/src/types/PoolId.sol";
-import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { IMarketDataFetcher } from "../interfaces/IMarketDataFetcher.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey, Currency} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IMarketDataFetcher} from "../interfaces/IMarketDataFetcher.sol";
 
 contract MarketDataFetcher is Initializable, UUPSUpgradeable, OwnableUpgradeable, IMarketDataFetcher {
     using PoolIdLibrary for PoolKey;
@@ -42,14 +42,15 @@ contract MarketDataFetcher is Initializable, UUPSUpgradeable, OwnableUpgradeable
      * @return totalMarketCap The aggregated market capitalization.
      * @return marketCaps Array of market capitalization values for each token.
      */
-    function getIndexMarketCaps(
-        address[] calldata indexTokenAddresses,
-        PoolKey[] calldata keys
-    ) public view returns (uint256 totalMarketCap, uint256[] memory marketCaps) {
+    function getIndexMarketCaps(address[] calldata indexTokenAddresses, PoolKey[] calldata keys)
+        public
+        view
+        returns (uint256 totalMarketCap, uint256[] memory marketCaps)
+    {
         require(indexTokenAddresses.length == keys.length, "Missing token addresses or keys");
         totalMarketCap = 0;
         marketCaps = new uint256[](indexTokenAddresses.length);
-        for (uint i = 0; i < indexTokenAddresses.length; i++) {
+        for (uint256 i = 0; i < indexTokenAddresses.length; i++) {
             totalMarketCap += getTokenMarketCap(indexTokenAddresses[i], keys[i]);
             marketCaps[i] = getTokenMarketCap(indexTokenAddresses[i], keys[i]);
         }
@@ -99,7 +100,7 @@ contract MarketDataFetcher is Initializable, UUPSUpgradeable, OwnableUpgradeable
      * @return price The pool's sqrtPriceX96.
      */
     function getScaledPoolPrice(PoolKey calldata key) internal view returns (uint160 price) {
-        (uint160 sqrtPriceX96, , , ) = poolManager.getSlot0(key.toId());
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());
         return sqrtPriceX96;
     }
 

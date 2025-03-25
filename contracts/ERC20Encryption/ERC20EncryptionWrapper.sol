@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity =0.8.26;
+pragma solidity 0.8.26;
 
-import "fhevm/lib/TFHE.sol";
-import "fhevm/config/ZamaFHEVMConfig.sol";
-import "fhevm-contracts/contracts/token/ERC20/extensions/ConfidentialERC20Mintable.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Wrapper.sol";
+import {TFHE, euint64} from "fhevm/lib/TFHE.sol";
+import {SepoliaZamaFHEVMConfig} from "fhevm/config/ZamaFHEVMConfig.sol";
+import {ConfidentialERC20Mintable} from "fhevm-contracts/contracts/token/ERC20/extensions/ConfidentialERC20Mintable.sol";
+import {ERC20, IERC20, IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ERC20Wrapper} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Wrapper.sol";
 
 contract ERC20EncryptionWrapper is SepoliaZamaFHEVMConfig, ConfidentialERC20Mintable {
     IERC20 private immutable _underlying;
@@ -17,11 +18,9 @@ contract ERC20EncryptionWrapper is SepoliaZamaFHEVMConfig, ConfidentialERC20Mint
      */
     error ERC20InvalidUnderlying(address token);
 
-    constructor(
-        string memory _name,
-        string memory _symbol,
-        IERC20 underlyingToken
-    ) ConfidentialERC20Mintable(_name, _symbol, msg.sender) {
+    constructor(string memory _name, string memory _symbol, IERC20 underlyingToken)
+        ConfidentialERC20Mintable(_name, _symbol, msg.sender)
+    {
         if (underlyingToken == IERC20(address(this))) {
             revert ERC20InvalidUnderlying(address(this));
         }
