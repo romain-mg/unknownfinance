@@ -2,19 +2,20 @@
 
 pragma solidity 0.8.26;
 
-import {UniversalRouter} from "@uniswap/universal-router/contracts/UniversalRouter.sol";
-import {Commands} from "@uniswap/universal-router/contracts/libraries/Commands.sol";
-import {IV4Router} from "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
-import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
-import {IPermit2} from "permit2/src/interfaces/IPermit2.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
-import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {PoolKey, Currency} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {ISwapsManager} from "../interfaces/ISwapsManager.sol";
+import { UniversalRouter } from "@uniswap/universal-router/contracts/UniversalRouter.sol";
+import { Commands } from "@uniswap/universal-router/contracts/libraries/Commands.sol";
+import { IV4Router } from "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
+import { Actions } from "@uniswap/v4-periphery/src/libraries/Actions.sol";
+import { IPermit2 } from "permit2/src/interfaces/IPermit2.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
+import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import { PoolKey, Currency } from "@uniswap/v4-core/src/types/PoolKey.sol";
+import { ISwapsManager } from "../interfaces/ISwapsManager.sol";
+import { equals, CurrencyLibrary } from "@uniswap/v4-core/src/types/Currency.sol";
 
 contract SwapsManager is Initializable, UUPSUpgradeable, OwnableUpgradeable, ISwapsManager {
     UniversalRouter public router;
@@ -41,8 +42,11 @@ contract SwapsManager is Initializable, UUPSUpgradeable, OwnableUpgradeable, ISw
         bytes[] memory inputs = new bytes[](1);
 
         // Encode V4Router actions
-        bytes memory actions =
-            abi.encodePacked(uint8(Actions.SWAP_EXACT_IN_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL));
+        bytes memory actions = abi.encodePacked(
+            uint8(Actions.SWAP_EXACT_IN_SINGLE),
+            uint8(Actions.SETTLE_ALL),
+            uint8(Actions.TAKE_ALL)
+        );
 
         // Prepare parameters for each action
         bytes[] memory params = new bytes[](3);
@@ -82,9 +86,17 @@ contract SwapsManager is Initializable, UUPSUpgradeable, OwnableUpgradeable, ISw
         router.execute(commands, inputs, deadline);
 
         // Verify and return the output amount to thhe caller
-        amountOut = IERC20(Currency.unwrap(key.currency1)).balanceOf(address(this));
-        require(amountOut >= minAmountOut, "Insufficient output amount");
-        bool success = IERC20(Currency.unwrap(key.currency1)).transfer(msg.sender, amountOut);
+        bool success;
+        if (!equals(key.currency1, CurrencyLibrary.ADDRESS_ZERO)) {
+            amountOut = address(this).balance;
+            (success, ) = msg.sender.call{ value: amountOut }("");
+        } else {
+            amountOut = IERC20(Currency.unwrap(key.currency1)).balanceOf(address(this));
+            success = IERC20(Currency.unwrap(key.currency1)).transfer(msg.sender, amountOut);
+        }
+        if (amountOut < minAmountOut) {
+            revert InsufficientSwapOutput(Currency.unwrap(key.currency1), amountOut, minAmountOut);
+        }
         if (!success) revert SwapOutputTransferFailed(msg.sender, IERC20(Currency.unwrap(key.currency1)), amountOut);
         return amountOut;
     }

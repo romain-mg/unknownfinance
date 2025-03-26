@@ -1,22 +1,23 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {IIndexFund} from "./interfaces/IIndexFund.sol";
-import {IndexFundToken} from "./IndexFundToken.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {IndexFundFactory} from "./IndexFundFactory.sol";
-import {ERC20EncryptionWrapper} from "./ERC20Encryption/ERC20EncryptionWrapper.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import {IMarketDataFetcher} from "./interfaces/IMarketDataFetcher.sol";
-import {ISwapsManager} from "./interfaces/ISwapsManager.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import { IIndexFund } from "./interfaces/IIndexFund.sol";
+import { IndexFundToken } from "./IndexFundToken.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
+import { IndexFundFactory } from "./IndexFundFactory.sol";
+import { ERC20EncryptionWrapper } from "./ERC20Encryption/ERC20EncryptionWrapper.sol";
+import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
+import { IMarketDataFetcher } from "./interfaces/IMarketDataFetcher.sol";
+import { ISwapsManager } from "./interfaces/ISwapsManager.sol";
+import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import { TFHE, euint256 } from "fhevm/lib/TFHE.sol";
 
 /**
  * @title IndexFund
  * @notice This contract implements an index fund where users can mint shares by depositing stablecoin.
  */
-contract IndexFund is IIndexFund, AccessControl, ReentrancyGuard {
+contract ConfidentialIndexFund is IIndexFund, AccessControl, ReentrancyGuard {
     // Array of tokens that compose the index fund.
     address[] indexTokens;
 
@@ -28,9 +29,6 @@ contract IndexFund is IIndexFund, AccessControl, ReentrancyGuard {
 
     // Address of the market data fetcher proxy.
     address immutable marketDataFetcherProxy;
-
-    // Flag to indicate if the stablecoin is encrypted.
-    bool immutable isStablecoinEncrypted;
 
     // Address of the swaps manager proxy.
     address immutable swapsManagerProxy;
@@ -53,11 +51,8 @@ contract IndexFund is IIndexFund, AccessControl, ReentrancyGuard {
     // Accumulated fees collected from mint operations.
     uint256 collectedFees;
 
-    // Maximum amount of shares that can be minted in one operation.
-    uint64 constant MAX_SHARES_AMOUNT_TO_MINT = 0xffffffffffffffff;
-
     // Maximum stablecoin amount allowed to be swapped in one transaction.
-    uint128 constant MAX_AMOUNT_TO_SWAP = 0xffffffffffffffffffffffffffffffff;
+    uint128 constant MAX_AMOUNT_TO_SWAP = 2 ** 128 - 1;
 
     event FeeCollected(address indexed user, uint256 indexed feeAmount);
 
@@ -78,7 +73,6 @@ contract IndexFund is IIndexFund, AccessControl, ReentrancyGuard {
      * @param _marketDataFetcherProxy Address of the proxy used to fetch market data.
      * @param _swapsManagerProxy Address of the proxy used to manage token swaps.
      * @param _initialSharePrice Initial share price (in stablecoin units).
-     * @param _isStablecoinEncrypted Boolean indicating if the stablecoin is encrypted.
      * @param _poolKeys Array of pool keys used for token swaps.
      */
     constructor(
@@ -89,7 +83,6 @@ contract IndexFund is IIndexFund, AccessControl, ReentrancyGuard {
         address _marketDataFetcherProxy,
         address _swapsManagerProxy,
         uint256 _initialSharePrice,
-        bool _isStablecoinEncrypted,
         PoolKey[] memory _poolKeys
     ) {
         indexTokens = _indexTokens;
@@ -99,7 +92,6 @@ contract IndexFund is IIndexFund, AccessControl, ReentrancyGuard {
         marketDataFetcherProxy = _marketDataFetcherProxy;
         swapsManagerProxy = _swapsManagerProxy;
         sharePrice = _initialSharePrice;
-        isStablecoinEncrypted = _isStablecoinEncrypted;
         protocolOwner = IndexFundFactory(_indexFundFactory).owner();
         poolKeys = _poolKeys;
     }
@@ -110,23 +102,24 @@ contract IndexFund is IIndexFund, AccessControl, ReentrancyGuard {
      * It fetches market data and calculates swap amounts based on token market caps.
      * @param amount The amount of stablecoin the user is depositing.
      */
+    // TODO UPDATE LOGIC WITH ENCRYPTION
     function mintShares(uint256 amount) external nonReentrant {
         require(amount > 0, "Amount must be greater than 0");
 
         if (stablecoin.allowance(msg.sender, address(this)) < amount) {
             revert InsufficientAllowance(address(stablecoin));
         }
-
+        // DOES NOT WORK WITH ENCRYPTED STABLECOIN
         if (!stablecoin.transferFrom(msg.sender, address(this), amount)) {
             revert TransferFailed(msg.sender, address(this), address(stablecoin), amount);
         }
 
-        if (isStablecoinEncrypted) {
-            ERC20EncryptionWrapper(address(stablecoin)).withdrawTo(address(this), amount);
-        }
+        // if (isStablecoinEncrypted) {
+        //     ERC20EncryptionWrapper(address(stablecoin)).withdrawTo(address(this), amount);
+        // }
 
-        (uint256 _totalIndexMarketCap, uint256[] memory marketCaps) =
-            IMarketDataFetcher(marketDataFetcherProxy).getIndexMarketCaps(indexTokens, poolKeys);
+        (uint256 _totalIndexMarketCap, uint256[] memory marketCaps) = IMarketDataFetcher(marketDataFetcherProxy)
+            .getIndexMarketCaps(indexTokens, poolKeys);
         totalIndexMarketCap = _totalIndexMarketCap;
 
         uint256 feeDivisor = IndexFundFactory(indexFundFactory).feeDivisor();
@@ -136,8 +129,11 @@ contract IndexFund is IIndexFund, AccessControl, ReentrancyGuard {
 
         uint256 stablecoinIn = amount - feeAmount;
 
-        uint256[] memory stablecoinAmountsToSwap =
-            computeStablecoinAmountsToSwap(stablecoinIn, _totalIndexMarketCap, marketCaps);
+        uint256[] memory stablecoinAmountsToSwap = computeStablecoinAmountsToSwap(
+            stablecoinIn,
+            _totalIndexMarketCap,
+            marketCaps
+        );
 
         for (uint256 i = 0; i < indexTokens.length; i++) {
             PoolKey memory poolKey = poolKeys[i];
@@ -162,9 +158,6 @@ contract IndexFund is IIndexFund, AccessControl, ReentrancyGuard {
         }
 
         uint256 sharesToMint = stablecoinIn / sharePrice;
-        if (sharesToMint > MAX_SHARES_AMOUNT_TO_MINT) {
-            revert SharesToMintAmountTooBig(sharesToMint);
-        }
 
         IndexFundToken(indexFundToken).mint(msg.sender, uint64(sharesToMint));
         emit SharesMinted(msg.sender, sharesToMint, stablecoinIn);
@@ -175,7 +168,12 @@ contract IndexFund is IIndexFund, AccessControl, ReentrancyGuard {
      * @dev Function implementation is pending.
      * @param amount The number of shares to burn.
      */
-    function burnShares(uint256 amount) external {}
+    function burnShares(uint256 amount, bool redeemIndexTokens) external {
+        require(amount > 0, "Amount must be greater than 0");
+
+        euint256 encryptedAmount = TFHE.asEuint256(amount);
+        // require(TFHE.le(encryptedAmount, indexFundToken.balanceOf(msg.sender)), "Amount too big");
+    }
 
     /**
      * @notice Computes the current value per share based on market data.
@@ -245,7 +243,9 @@ contract IndexFund is IIndexFund, AccessControl, ReentrancyGuard {
             amounts[i] = (totalAmount * marketCaps[i]) / _totalIndexMarketCap;
             // Approve token for swapping with a permit valid for 1 day.
             ISwapsManager(swapsManagerProxy).approveTokenWithPermit2(
-                indexTokens[i], uint160(amounts[i]), uint48(block.timestamp + 1 days)
+                indexTokens[i],
+                uint160(amounts[i]),
+                uint48(block.timestamp + 1 days)
             );
         }
         return amounts;

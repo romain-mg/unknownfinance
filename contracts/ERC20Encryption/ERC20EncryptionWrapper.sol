@@ -1,26 +1,28 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {TFHE, euint64} from "fhevm/lib/TFHE.sol";
-import {SepoliaZamaFHEVMConfig} from "fhevm/config/ZamaFHEVMConfig.sol";
-import {ConfidentialERC20Mintable} from "fhevm-contracts/contracts/token/ERC20/extensions/ConfidentialERC20Mintable.sol";
-import {ERC20, IERC20, IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ERC20Wrapper} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Wrapper.sol";
+import { TFHE, euint256 } from "fhevm/lib/TFHE.sol";
+import { SepoliaZamaFHEVMConfig } from "fhevm/config/ZamaFHEVMConfig.sol";
+import { ERC20, IERC20, IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { ERC20Wrapper } from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Wrapper.sol";
+import { ConfidentialERC20WithErrorsMintable } from "./ConfidentialERC20WithErrorsMintable.sol";
 
-contract ERC20EncryptionWrapper is SepoliaZamaFHEVMConfig, ConfidentialERC20Mintable {
+contract ERC20EncryptionWrapper is SepoliaZamaFHEVMConfig, ConfidentialERC20WithErrorsMintable {
     IERC20 private immutable _underlying;
 
-    event Burn(address indexed to, uint64 amount);
+    event Burn(address indexed to, uint256 amount);
 
     /**
      * @dev The underlying token couldn't be wrapped.
      */
     error ERC20InvalidUnderlying(address token);
 
-    constructor(string memory _name, string memory _symbol, IERC20 underlyingToken)
-        ConfidentialERC20Mintable(_name, _symbol, msg.sender)
-    {
+    constructor(
+        string memory _name,
+        string memory _symbol,
+        IERC20 underlyingToken
+    ) ConfidentialERC20WithErrorsMintable(_name, _symbol, msg.sender) {
         if (underlyingToken == IERC20(address(this))) {
             revert ERC20InvalidUnderlying(address(this));
         }
@@ -39,7 +41,7 @@ contract ERC20EncryptionWrapper is SepoliaZamaFHEVMConfig, ConfidentialERC20Mint
             revert ERC20InvalidReceiver(account);
         }
         SafeERC20.safeTransferFrom(_underlying, sender, address(this), value);
-        mint(account, uint64(value));
+        mint(account, value);
         return true;
     }
 
@@ -50,7 +52,7 @@ contract ERC20EncryptionWrapper is SepoliaZamaFHEVMConfig, ConfidentialERC20Mint
         if (account == address(this)) {
             revert ERC20InvalidReceiver(account);
         }
-        _unsafeBurn(_msgSender(), uint64(value));
+        _unsafeBurn(_msgSender(), value);
         SafeERC20.safeTransfer(_underlying, account, value);
         return true;
     }
@@ -79,11 +81,11 @@ contract ERC20EncryptionWrapper is SepoliaZamaFHEVMConfig, ConfidentialERC20Mint
      */
     function _recover(address account) internal returns (uint256) {
         uint256 value = _underlying.balanceOf(address(this)) - totalSupply();
-        mint(account, uint64(value));
+        mint(account, value);
         return value;
     }
 
-    function _unsafeBurn(address account, uint64 amount) internal {
+    function _unsafeBurn(address account, uint256 amount) internal {
         _unsafeBurnNoEvent(account, amount);
         emit Transfer(account, address(0), _PLACEHOLDER);
     }
@@ -92,8 +94,8 @@ contract ERC20EncryptionWrapper is SepoliaZamaFHEVMConfig, ConfidentialERC20Mint
      * @dev It does not incorporate any overflow check. It must be implemented
      *      by the function calling it.
      */
-    function _unsafeBurnNoEvent(address account, uint64 amount) internal {
-        euint64 newBalanceAccount = TFHE.sub(_balances[account], amount);
+    function _unsafeBurnNoEvent(address account, uint256 amount) internal {
+        euint256 newBalanceAccount = TFHE.sub(_balances[account], amount);
         _balances[account] = newBalanceAccount;
         TFHE.allowThis(newBalanceAccount);
         TFHE.allow(newBalanceAccount, account);

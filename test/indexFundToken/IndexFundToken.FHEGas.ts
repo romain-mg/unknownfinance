@@ -25,7 +25,7 @@ describe("IndexFundToken:FHEGas", function () {
     expect(t1?.status).to.eq(1);
 
     const input = this.fhevm.createEncryptedInput(this.contractAddress, this.signers.alice.address);
-    input.add64(1337);
+    input.add256(1337);
     const encryptedTransferAmount = await input.encrypt();
     const tx = await this.erc20["transfer(address,bytes32,bytes)"](
       this.signers.bob,
@@ -48,7 +48,7 @@ describe("IndexFundToken:FHEGas", function () {
     await transaction.wait();
 
     const inputAlice = this.fhevm.createEncryptedInput(this.contractAddress, this.signers.alice.address);
-    inputAlice.add64(1337);
+    inputAlice.add256(1337);
     const encryptedAllowanceAmount = await inputAlice.encrypt();
     const tx = await this.erc20["approve(address,bytes32,bytes)"](
       this.signers.bob,
@@ -59,7 +59,7 @@ describe("IndexFundToken:FHEGas", function () {
 
     const bobErc20 = this.erc20.connect(this.signers.bob);
     const inputBob2 = this.fhevm.createEncryptedInput(this.contractAddress, this.signers.bob.address);
-    inputBob2.add64(1337); // below allowance so next tx should send token
+    inputBob2.add256(1337); // below allowance so next tx should send token
     const encryptedTransferAmount2 = await inputBob2.encrypt();
     const tx3 = await bobErc20["transferFrom(address,address,bytes32,bytes)"](
       this.signers.alice,

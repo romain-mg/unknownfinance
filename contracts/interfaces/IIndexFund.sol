@@ -10,13 +10,15 @@ interface IIndexFund {
 
     error SharesToMintAmountTooBig(uint256 amountToMint);
 
+    error SharesToBurnAmountTooBig(uint256 amountToBurn);
+
     error AmountToSwapTooBig(uint256 amountToSwap);
 
     error TransferFailed(address from, address to, address token, uint256 amount);
 
     function mintShares(uint256 amount) external;
 
-    function burnShares(uint256 amount) external;
+    function burnShares(uint256 amount, bool redeemIndexTokens) external;
 
     function getIndexTokens() external view returns (address[] memory);
 

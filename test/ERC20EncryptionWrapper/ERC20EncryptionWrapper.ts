@@ -1,7 +1,7 @@
 import { expect } from "chai";
 
 import { createInstance } from "../instance";
-import { reencryptEuint64 } from "../reencrypt";
+import { reencryptEuint256 } from "../reencrypt";
 import { getSigners, initSigners } from "../signers";
 import { debug } from "../utils";
 import { deployERC20EncryptionWrapperFixture } from "./ERC20EncryptionWrapper.fixture";
@@ -31,7 +31,7 @@ describe("ConfidentialERC20Wrapper", function () {
     await wrapErc20.wait();
     // Reencrypt Alice's balance
     const balanceHandleAlice = await this.wrapperContract.balanceOf(this.signers.alice);
-    const encryptedTokenBalanceAlice = await reencryptEuint64(
+    const encryptedTokenBalanceAlice = await reencryptEuint256(
       this.signers.alice,
       this.fhevm,
       balanceHandleAlice,
