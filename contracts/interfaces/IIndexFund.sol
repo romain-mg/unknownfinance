@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../IndexFundToken.sol";
+import { einput } from "fhevm/lib/TFHE.sol";
 
 interface IIndexFund {
     error InsufficientAllowance(address token);
@@ -14,9 +15,9 @@ interface IIndexFund {
 
     error AmountToSwapTooBig(uint256 amountToSwap);
 
-    error TransferFailed(address from, address to, address token, uint256 amount);
+    error TransferFailed();
 
-    function mintShares(uint256 amount) external;
+    function mintShares(einput encryptedAmount, bytes calldata inputProof) external;
 
     function burnShares(uint256 amount, bool redeemIndexTokens) external;
 

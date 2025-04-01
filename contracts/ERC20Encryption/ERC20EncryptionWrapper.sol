@@ -7,6 +7,7 @@ import { ERC20, IERC20, IERC20Metadata } from "@openzeppelin/contracts/token/ERC
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import { ERC20Wrapper } from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Wrapper.sol";
 import { ConfidentialERC20WithErrorsMintable } from "./ConfidentialERC20WithErrorsMintable.sol";
+import "fhevm/gateway/GatewayCaller.sol";
 
 contract ERC20EncryptionWrapper is SepoliaZamaFHEVMConfig, ConfidentialERC20WithErrorsMintable {
     IERC20 private immutable _underlying;
@@ -48,7 +49,7 @@ contract ERC20EncryptionWrapper is SepoliaZamaFHEVMConfig, ConfidentialERC20With
     /**
      * @dev Allow a user to burn a number of wrapped tokens and withdraw the corresponding number of underlying tokens.
      */
-    function withdrawTo(address account, uint256 value) public returns (bool) {
+    function withdrawTo(address account, euint256 value) public returns (bool) {
         if (account == address(this)) {
             revert ERC20InvalidReceiver(account);
         }
