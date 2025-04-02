@@ -2,11 +2,11 @@
 pragma solidity ^0.8.24;
 
 import "fhevm/lib/TFHE.sol";
-import { ConfidentialERC20 } from "./ConfidentialERC20.sol";
-import { TFHE, euint8 } from "fhevm/lib/TFHE.sol";
+import {ConfidentialERC20} from "./ConfidentialERC20.sol";
+import {TFHE, euint8} from "fhevm/lib/TFHE.sol";
 import "fhevm/gateway/GatewayCaller.sol";
-import { SepoliaZamaFHEVMConfig } from "fhevm/config/ZamaFHEVMConfig.sol";
-import { SepoliaZamaGatewayConfig } from "fhevm/config/ZamaGatewayConfig.sol";
+import {SepoliaZamaFHEVMConfig} from "fhevm/config/ZamaFHEVMConfig.sol";
+import {SepoliaZamaGatewayConfig} from "fhevm/config/ZamaGatewayConfig.sol";
 
 /**
  * @title   ConfidentialERC20WithErrors.
@@ -55,9 +55,7 @@ abstract contract ConfidentialERC20WithErrors is
         /// @dev Check whether the owner has enough tokens.
         ebool canTransfer = TFHE.le(amount, _balances[msg.sender]);
         euint8 errorCode = TFHE.select(
-            canTransfer,
-            _errorCodeToEuint8(ErrorCodes.NO_ERROR),
-            _errorCodeToEuint8(ErrorCodes.UNSUFFICIENT_BALANCE)
+            canTransfer, _errorCodeToEuint8(ErrorCodes.NO_ERROR), _errorCodeToEuint8(ErrorCodes.UNSUFFICIENT_BALANCE)
         );
         uint256[] memory cts = new uint256[](1);
         cts[0] = Gateway.toUint256(errorCode);
@@ -77,7 +75,7 @@ abstract contract ConfidentialERC20WithErrors is
         return true;
     }
 
-    function transferCallback(uint256 /*requestID*/, uint8 decryptedErrorCode) public onlyGateway {
+    function transferCallback(uint256, /*requestID*/ uint8 decryptedErrorCode) public onlyGateway {
         _saveError(decryptedErrorCode);
     }
 
@@ -100,11 +98,12 @@ abstract contract ConfidentialERC20WithErrors is
         emit Transfer(from, to, errorGetCounter() - 1);
     }
 
-    function _updateAllowance(
-        address owner,
-        address spender,
-        euint256 amount
-    ) internal virtual override returns (ebool isTransferable) {
+    function _updateAllowance(address owner, address spender, euint256 amount)
+        internal
+        virtual
+        override
+        returns (ebool isTransferable)
+    {
         euint256 currentAllowance = _allowance(owner, spender);
         /// @dev It checks whether the allowance suffices.
         ebool allowedTransfer = TFHE.le(amount, currentAllowance);

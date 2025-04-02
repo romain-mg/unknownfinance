@@ -11,19 +11,18 @@ import { IndexFundToken } from "./IndexFundToken.sol";
 import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 import { IIndexFund } from "./interfaces/IIndexFund.sol";
 import { IHooks } from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import { MarketDataFetcher } from "./marketData/MarketDataFetcher.sol";
 
 contract IndexFundFactory is IIndexFundFactory, Ownable {
-    using CurrencyLibrary for Currency;
+    mapping(bytes32 => IIndexFund) public indexTokensAndStablecoinToIndexFund;
 
     mapping(bytes32 => PoolKey) public tokenStablecoinPairToPoolKey;
-
-    mapping(bytes32 => IIndexFund) public indexTokensAndStablecoinToIndexFund;
 
     address public swapsManagerProxy;
 
     uint96 indexFundsCount;
 
-    address public marketDataFetcherProxy;
+    MarketDataFetcher public marketDataFetcher;
 
     uint256 defaultSharePrice;
 
@@ -31,12 +30,12 @@ contract IndexFundFactory is IIndexFundFactory, Ownable {
 
     constructor(
         address _swapsManagerProxy,
-        address _markerDataFetcherProxy,
+        address _markerDataFetcher,
         uint256 _defaultSharePrice,
         uint256 _feeDivisor
     ) Ownable(msg.sender) {
         swapsManagerProxy = _swapsManagerProxy;
-        marketDataFetcherProxy = _markerDataFetcherProxy;
+        marketDataFetcher = MarketDataFetcher(_markerDataFetcher);
         defaultSharePrice = _defaultSharePrice;
         feeDivisor = _feeDivisor;
     }
@@ -49,9 +48,16 @@ contract IndexFundFactory is IIndexFundFactory, Ownable {
      */
 
     function createConfidentialIndexFund(address[] memory indexTokens, address stablecoin) external returns (address) {
+        if (marketDataFetcher.getTokenDataFeed(stablecoin) == address(0)) {
+            revert NoPriceFeedForToken(stablecoin);
+        }
         bytes32 indexFundKey = keccak256(abi.encodePacked(indexTokens, stablecoin));
         PoolKey[] memory poolKeys = new PoolKey[](indexTokens.length);
         for (uint256 i = 0; i < indexTokens.length; i++) {
+            address indexToken = indexTokens[i];
+            if (marketDataFetcher.getTokenDataFeed(indexToken) == address(0)) {
+                revert NoPriceFeedForToken(indexToken);
+            }
             bytes32 tokenStablecoinPair = keccak256(abi.encodePacked(indexTokens[i], stablecoin));
             PoolKey memory poolKey = tokenStablecoinPairToPoolKey[tokenStablecoinPair];
             if (
@@ -76,7 +82,7 @@ contract IndexFundFactory is IIndexFundFactory, Ownable {
             stablecoin,
             address(this),
             address(newIndexFundToken),
-            marketDataFetcherProxy,
+            address(marketDataFetcher),
             swapsManagerProxy,
             defaultSharePrice,
             poolKeys
