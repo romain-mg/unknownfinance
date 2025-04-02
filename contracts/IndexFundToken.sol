@@ -13,8 +13,7 @@ contract IndexFundToken is SepoliaZamaFHEVMConfig, ConfidentialERC20WithErrorsMi
     /// @notice Constructor to initialize the token's name and symbol, and set up the owner
     /// @param name_ The name of the token
     /// @param symbol_ The symbol of the token
-    constructor(
-        string memory name_,
-        string memory symbol_
-    ) ConfidentialERC20WithErrorsMintable(name_, symbol_, msg.sender) {}
+    constructor(string memory name_, string memory symbol_)
+        ConfidentialERC20WithErrorsMintable(name_, symbol_, msg.sender)
+    {}
 }

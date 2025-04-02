@@ -4,7 +4,8 @@ pragma solidity 0.8.26;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../IndexFundToken.sol";
-import { einput } from "fhevm/lib/TFHE.sol";
+import {einput} from "fhevm/lib/TFHE.sol";
+import {ERC20EncryptionWrapper} from "../ERC20Encryption/ERC20EncryptionWrapper.sol";
 
 interface IIndexFund {
     error InsufficientAllowance(address token);
@@ -25,5 +26,5 @@ interface IIndexFund {
 
     function getIndexFundToken() external view returns (IndexFundToken indexFundToken);
 
-    function getStablecoin() external view returns (IERC20 stablecoin);
+    function getStablecoin() external view returns (ERC20EncryptionWrapper stablecoin);
 }

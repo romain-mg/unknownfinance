@@ -14,11 +14,13 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.s
 import { TFHE, euint256, ebool, einput } from "fhevm/lib/TFHE.sol";
 import { ConfidentialERC20WithErrorsMintable } from "./ERC20Encryption/ConfidentialERC20WithErrorsMintable.sol";
 import { ConfidentialERC20WithErrors } from "./ERC20Encryption/ConfidentialERC20WithErrors.sol";
-import { IERC20EncryptionWrapper } from "./interfaces/IERC20EncryptionWrapper.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { MarketDataFetcher } from "./marketData/MarketDataFetcher.sol";
 /**
  * @title IndexFund
  * @notice This contract implements an index fund where users can mint shares by depositing stablecoin.
  */
+
 contract ConfidentialIndexFund is IIndexFund, AccessControl, ReentrancyGuard {
     // Array of tokens that compose the index fund.
     address[] indexTokens;
@@ -29,8 +31,8 @@ contract ConfidentialIndexFund is IIndexFund, AccessControl, ReentrancyGuard {
     // Token representing shares in the index fund.
     IndexFundToken immutable indexFundToken;
 
-    // Address of the market data fetcher proxy.
-    address immutable marketDataFetcherProxy;
+    // Address of the market data fetcher.
+    MarketDataFetcher immutable marketDataFetcher;
 
     // Address of the swaps manager proxy.
     address immutable swapsManagerProxy;
@@ -40,6 +42,9 @@ contract ConfidentialIndexFund is IIndexFund, AccessControl, ReentrancyGuard {
 
     // Stablecoin used for minting shares.
     ERC20EncryptionWrapper immutable stablecoin;
+
+    // Transparent version of the stablecoin used for minting shares.
+    ERC20 immutable decypheredStablecoin;
 
     // Current share price in terms of the stablecoin.
     uint256 sharePrice;
@@ -72,7 +77,7 @@ contract ConfidentialIndexFund is IIndexFund, AccessControl, ReentrancyGuard {
      * @param _stablecoin Address of the stablecoin used for deposits.
      * @param _indexFundFactory Address of the factory contract that deploys the index fund.
      * @param _indexFundToken Address of the token contract representing the index fund shares.
-     * @param _marketDataFetcherProxy Address of the proxy used to fetch market data.
+     * @param _marketDataFetcher Address of the protocol market data fetcher.
      * @param _swapsManagerProxy Address of the proxy used to manage token swaps.
      * @param _initialSharePrice Initial share price (in stablecoin units).
      * @param _poolKeys Array of pool keys used for token swaps.
@@ -82,7 +87,7 @@ contract ConfidentialIndexFund is IIndexFund, AccessControl, ReentrancyGuard {
         address _stablecoin,
         address _indexFundFactory,
         address _indexFundToken,
-        address _marketDataFetcherProxy,
+        address _marketDataFetcher,
         address _swapsManagerProxy,
         uint256 _initialSharePrice,
         PoolKey[] memory _poolKeys
@@ -91,7 +96,7 @@ contract ConfidentialIndexFund is IIndexFund, AccessControl, ReentrancyGuard {
         stablecoin = ERC20EncryptionWrapper(_stablecoin);
         indexFundFactory = _indexFundFactory;
         indexFundToken = IndexFundToken(_indexFundToken);
-        marketDataFetcherProxy = _marketDataFetcherProxy;
+        marketDataFetcher = MarketDataFetcher(_marketDataFetcher);
         swapsManagerProxy = _swapsManagerProxy;
         sharePrice = _initialSharePrice;
         protocolOwner = IndexFundFactory(_indexFundFactory).owner();
@@ -107,23 +112,26 @@ contract ConfidentialIndexFund is IIndexFund, AccessControl, ReentrancyGuard {
     function mintShares(einput encryptedAmount, bytes calldata inputProof) external nonReentrant {
         euint256 amount = TFHE.asEuint256(encryptedAmount, inputProof);
 
-        stablecoin.transferFrom(msg.sender, address(this), amount);
+        if (!stablecoin.transferFrom(msg.sender, address(this), amount)) {
+            revert TransferFailed();
+        }
         uint256 transferErrorId = stablecoin.errorGetCounter() - 1;
         uint8 tramsferErrorCode = stablecoin.getErrorCodeForTransferId(transferErrorId);
         uint8 noErrorCode = uint8(ConfidentialERC20WithErrors.ErrorCodes.NO_ERROR);
         if (tramsferErrorCode != noErrorCode) {
             revert TransferFailed();
         }
-        // then unwrap the stablecoin
-        stablecoin.withdrawTo(address(this), amount);
 
-        (uint256 _totalIndexMarketCap, uint256[] memory marketCaps) = IMarketDataFetcher(marketDataFetcherProxy)
-            .getIndexMarketCaps(indexTokens, poolKeys);
-        totalIndexMarketCap = _totalIndexMarketCap;
+        // then unwrap the stablecoin NEED TO DECYPHER AMOUNT BEFORE
+        // stablecoin.withdrawTo(address(this), amount);
 
-        uint256 feeDivisor = IndexFundFactory(indexFundFactory).feeDivisor();
+        // (uint256 _totalIndexMarketCap, uint256[] memory marketCaps) = IMarketDataFetcher(marketDataFetcher)
+        //     .getIndexMarketCaps(indexTokens);
+        // totalIndexMarketCap = _totalIndexMarketCap;
 
-        // need to decypher amount to pursue
+        // uint256 feeDivisor = IndexFundFactory(indexFundFactory).feeDivisor();
+
+        // // need to decypher amount to pursue
 
         // uint256 feeAmount = amount / feeDivisor;
         // collectedFees += feeAmount;
@@ -142,7 +150,7 @@ contract ConfidentialIndexFund is IIndexFund, AccessControl, ReentrancyGuard {
         //     uint256 stablecoinAmountToSwap = stablecoinAmountsToSwap[i];
 
         //     // Fetch the token price to compute a minimum acceptable output (with 10% slippage).
-        //     uint256 tokenPrice = IMarketDataFetcher(marketDataFetcherProxy).getTokenPrice(indexTokens[i], poolKey);
+        //     uint256 tokenPrice = IMarketDataFetcher(marketDataFetcher).getTokenPrice(indexTokens[i]);
         //     uint256 minAmountOut = (tokenPrice * stablecoinAmountToSwap * 9) / 10;
 
         //     if (stablecoinAmountToSwap > MAX_AMOUNT_TO_SWAP) {
@@ -202,7 +210,7 @@ contract ConfidentialIndexFund is IIndexFund, AccessControl, ReentrancyGuard {
      * @notice Retrieves the stablecoin contract used by the index fund.
      * @return The IERC20 stablecoin contract.
      */
-    function getStablecoin() public view returns (IERC20EncryptionWrapper) {
+    function getStablecoin() public view returns (ERC20EncryptionWrapper) {
         return stablecoin;
     }
 
@@ -214,7 +222,7 @@ contract ConfidentialIndexFund is IIndexFund, AccessControl, ReentrancyGuard {
         require(collectedFees > 0, "No fees to send");
         // Reset fees before transferring to prevent reentrancy.
         collectedFees = 0;
-        if (stablecoin.transfer(protocolOwner, collectedFees) == false) {
+        if (!decypheredStablecoin.transfer(protocolOwner, collectedFees)) {
             revert TransferFailed();
         }
     }

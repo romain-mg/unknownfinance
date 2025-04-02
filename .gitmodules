@@ -26,3 +26,6 @@
 	path = lib/universal-router.git
 	url = https://github.com/Uniswap/universal-router.git
 	branch = main
+[submodule "lib/chainlink"]
+	path = lib/chainlink
+	url = https://github.com/smartcontractkit/chainlink

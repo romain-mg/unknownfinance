@@ -7,6 +7,8 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 interface IIndexFundFactory {
     error CurrencyPairNotWhitelisted(address token, address stablecoin);
 
+    error NoPriceFeedForToken(address token);
+
     error IndexFundAlreadyExists(address[] indexTokens, address stablecoin);
 
     function createConfidentialIndexFund(address[] memory _indexTokens, address _stablecoin) external returns (address);

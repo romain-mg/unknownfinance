@@ -2,13 +2,12 @@
 pragma solidity ^0.8.24;
 
 import "fhevm/lib/TFHE.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20.sol";
 
 /**
  * @title   IConfidentialERC20.
  * @notice  Interface that defines ERC20-like tokens with encrypted balances.
  */
-interface IConfidentialERC20 is IERC20 {
+interface IConfidentialERC20 {
     /**
      * @notice              Emitted when the allowance of a `spender` for an `owner` is set by
      *                      a call to {approve}.
@@ -36,11 +35,9 @@ interface IConfidentialERC20 is IERC20 {
      * @param inputProof        Input proof.
      * @return isSuccess        Whether it succeeds.
      */
-    function approve(
-        address spender,
-        einput encryptedAmount,
-        bytes calldata inputProof
-    ) external returns (bool isSuccess);
+    function approve(address spender, einput encryptedAmount, bytes calldata inputProof)
+        external
+        returns (bool isSuccess);
 
     /**
      * @notice                  Set the `amount` as the allowance of `spender` over the caller's tokens.
@@ -57,7 +54,9 @@ interface IConfidentialERC20 is IERC20 {
      * @param inputProof        Input proof.
      * @return isSuccess        Whether it succeeds.
      */
-    function transfer(address to, einput encryptedAmount, bytes calldata inputProof) external returns (bool isSuccess);
+    function transfer(address to, einput encryptedAmount, bytes calldata inputProof)
+        external
+        returns (bool isSuccess);
 
     /**
      * @notice              Transfer an amount from the message sender address to the `to` address.
@@ -84,12 +83,9 @@ interface IConfidentialERC20 is IERC20 {
      * @param inputProof        Input proof.
      * @return isSuccess        Whether it succeeds.
      */
-    function transferFrom(
-        address from,
-        address to,
-        einput encryptedAmount,
-        bytes calldata inputProof
-    ) external returns (bool isSuccess);
+    function transferFrom(address from, address to, einput encryptedAmount, bytes calldata inputProof)
+        external
+        returns (bool isSuccess);
 
     /**
      * @notice              Return the remaining number of tokens that `spender` is allowed to spend

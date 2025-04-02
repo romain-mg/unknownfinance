@@ -5,12 +5,14 @@ pragma solidity 0.8.26;
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 
 interface IMarketDataFetcher {
-    function getIndexMarketCaps(address[] calldata indexTokenAddresses, PoolKey[] calldata keys)
+    error DataFeedDoesNotExist(address token, bool isAgainstUSD);
+
+    function getIndexMarketCaps(address[] calldata indexTokenAddresses)
         external
         view
-        returns (uint256 totalMarketCap, uint256[] memory marketCaps);
+        returns (uint256 totalMarketCap, uint256[] memory individualMarketCaps);
 
-    function getTokenMarketCap(address token, PoolKey calldata key) external view returns (uint256);
+    function getTokenMarketCap(address token) external view returns (uint256);
 
-    function getTokenPrice(address token, PoolKey calldata key) external view returns (uint256);
+    function getTokenPrice(address token) external view returns (uint256);
 }

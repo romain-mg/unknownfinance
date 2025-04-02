@@ -2,9 +2,9 @@
 pragma solidity ^0.8.24;
 
 import "fhevm/lib/TFHE.sol";
-import { IERC20Errors } from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
-import { IConfidentialERC20 } from "../interfaces/IConfidentialERC20.sol";
-import { TFHEErrors } from "fhevm-contracts/contracts/utils/TFHEErrors.sol";
+import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+import {IConfidentialERC20} from "../interfaces/IConfidentialERC20.sol";
+import {TFHEErrors} from "fhevm-contracts/contracts/utils/TFHEErrors.sol";
 
 /**
  * @title   ConfidentialERC20.
@@ -44,7 +44,11 @@ abstract contract ConfidentialERC20 is IConfidentialERC20, IERC20Errors, TFHEErr
     /**
      * @notice See {IConfidentialERC20-approve}.
      */
-    function approve(address spender, einput encryptedAmount, bytes calldata inputProof) public virtual returns (bool) {
+    function approve(address spender, einput encryptedAmount, bytes calldata inputProof)
+        public
+        virtual
+        returns (bool)
+    {
         approve(spender, TFHE.asEuint256(encryptedAmount, inputProof));
         return true;
     }
@@ -83,12 +87,11 @@ abstract contract ConfidentialERC20 is IConfidentialERC20, IERC20Errors, TFHEErr
     /**
      * @notice See {IConfidentialERC20-transferFrom}.
      */
-    function transferFrom(
-        address from,
-        address to,
-        einput encryptedAmount,
-        bytes calldata inputProof
-    ) public virtual returns (bool) {
+    function transferFrom(address from, address to, einput encryptedAmount, bytes calldata inputProof)
+        public
+        virtual
+        returns (bool)
+    {
         transferFrom(from, to, TFHE.asEuint256(encryptedAmount, inputProof));
         return true;
     }

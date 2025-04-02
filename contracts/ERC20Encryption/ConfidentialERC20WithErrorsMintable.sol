@@ -2,8 +2,8 @@
 pragma solidity ^0.8.24;
 
 import "fhevm/lib/TFHE.sol";
-import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
-import { ConfidentialERC20WithErrors } from "./ConfidentialERC20WithErrors.sol";
+import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {ConfidentialERC20WithErrors} from "./ConfidentialERC20WithErrors.sol";
 
 /**
  * @title   ConfidentialERC20WithErrorsMintable.
@@ -21,11 +21,10 @@ abstract contract ConfidentialERC20WithErrorsMintable is Ownable2Step, Confident
      * @param symbol_   Symbol.
      * @param owner_    Owner address.
      */
-    constructor(
-        string memory name_,
-        string memory symbol_,
-        address owner_
-    ) Ownable(owner_) ConfidentialERC20WithErrors(name_, symbol_) {}
+    constructor(string memory name_, string memory symbol_, address owner_)
+        Ownable(owner_)
+        ConfidentialERC20WithErrors(name_, symbol_)
+    {}
 
     /**
      * @notice       Mint tokens.
