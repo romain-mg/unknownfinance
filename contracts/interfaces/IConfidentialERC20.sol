@@ -2,12 +2,13 @@
 pragma solidity ^0.8.24;
 
 import "fhevm/lib/TFHE.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20.sol";
 
 /**
  * @title   IConfidentialERC20.
  * @notice  Interface that defines ERC20-like tokens with encrypted balances.
  */
-interface IConfidentialERC20 {
+interface IConfidentialERC20 is IERC20 {
     /**
      * @notice              Emitted when the allowance of a `spender` for an `owner` is set by
      *                      a call to {approve}.
