@@ -3,8 +3,8 @@ pragma solidity ^0.8.24;
 
 import "fhevm/lib/TFHE.sol";
 import { IERC20Errors } from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
-import { TFHEErrors } from "fhevm-contracts/contracts/utils/TFHEErrors.sol";
 import { IConfidentialERC20 } from "../interfaces/IConfidentialERC20.sol";
+import { TFHEErrors } from "fhevm-contracts/contracts/utils/TFHEErrors.sol";
 
 /**
  * @title   ConfidentialERC20.

@@ -11,8 +11,10 @@ import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol"
 import { IMarketDataFetcher } from "./interfaces/IMarketDataFetcher.sol";
 import { ISwapsManager } from "./interfaces/ISwapsManager.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import { TFHE, euint256 } from "fhevm/lib/TFHE.sol";
-
+import { TFHE, euint256, ebool, einput } from "fhevm/lib/TFHE.sol";
+import { ConfidentialERC20WithErrorsMintable } from "./ERC20Encryption/ConfidentialERC20WithErrorsMintable.sol";
+import { ConfidentialERC20WithErrors } from "./ERC20Encryption/ConfidentialERC20WithErrors.sol";
+import { IERC20EncryptionWrapper } from "./interfaces/IERC20EncryptionWrapper.sol";
 /**
  * @title IndexFund
  * @notice This contract implements an index fund where users can mint shares by depositing stablecoin.
@@ -37,7 +39,7 @@ contract ConfidentialIndexFund is IIndexFund, AccessControl, ReentrancyGuard {
     address immutable indexFundFactory;
 
     // Stablecoin used for minting shares.
-    IERC20 immutable stablecoin;
+    ERC20EncryptionWrapper immutable stablecoin;
 
     // Current share price in terms of the stablecoin.
     uint256 sharePrice;
@@ -86,7 +88,7 @@ contract ConfidentialIndexFund is IIndexFund, AccessControl, ReentrancyGuard {
         PoolKey[] memory _poolKeys
     ) {
         indexTokens = _indexTokens;
-        stablecoin = IERC20(_stablecoin);
+        stablecoin = ERC20EncryptionWrapper(_stablecoin);
         indexFundFactory = _indexFundFactory;
         indexFundToken = IndexFundToken(_indexFundToken);
         marketDataFetcherProxy = _marketDataFetcherProxy;
@@ -100,67 +102,66 @@ contract ConfidentialIndexFund is IIndexFund, AccessControl, ReentrancyGuard {
      * @notice Mints new index fund shares by depositing a specified amount of stablecoin.
      * @dev Handles fee deduction, token swaps, and share minting.
      * It fetches market data and calculates swap amounts based on token market caps.
-     * @param amount The amount of stablecoin the user is depositing.
+     * @param encryptedAmount The encrypted amount of stablecoin the user is depositing.
      */
-    // TODO UPDATE LOGIC WITH ENCRYPTION
-    function mintShares(uint256 amount) external nonReentrant {
-        require(amount > 0, "Amount must be greater than 0");
+    function mintShares(einput encryptedAmount, bytes calldata inputProof) external nonReentrant {
+        euint256 amount = TFHE.asEuint256(encryptedAmount, inputProof);
 
-        if (stablecoin.allowance(msg.sender, address(this)) < amount) {
-            revert InsufficientAllowance(address(stablecoin));
+        stablecoin.transferFrom(msg.sender, address(this), amount);
+        uint256 transferErrorId = stablecoin.errorGetCounter() - 1;
+        uint8 tramsferErrorCode = stablecoin.getErrorCodeForTransferId(transferErrorId);
+        uint8 noErrorCode = uint8(ConfidentialERC20WithErrors.ErrorCodes.NO_ERROR);
+        if (tramsferErrorCode != noErrorCode) {
+            revert TransferFailed();
         }
-        // DOES NOT WORK WITH ENCRYPTED STABLECOIN
-        if (!stablecoin.transferFrom(msg.sender, address(this), amount)) {
-            revert TransferFailed(msg.sender, address(this), address(stablecoin), amount);
-        }
-
-        // if (isStablecoinEncrypted) {
-        //     ERC20EncryptionWrapper(address(stablecoin)).withdrawTo(address(this), amount);
-        // }
+        // then unwrap the stablecoin
+        stablecoin.withdrawTo(address(this), amount);
 
         (uint256 _totalIndexMarketCap, uint256[] memory marketCaps) = IMarketDataFetcher(marketDataFetcherProxy)
             .getIndexMarketCaps(indexTokens, poolKeys);
         totalIndexMarketCap = _totalIndexMarketCap;
 
         uint256 feeDivisor = IndexFundFactory(indexFundFactory).feeDivisor();
-        uint256 feeAmount = amount / feeDivisor;
-        collectedFees += feeAmount;
-        emit FeeCollected(msg.sender, feeAmount);
 
-        uint256 stablecoinIn = amount - feeAmount;
+        // need to decypher amount to pursue
 
-        uint256[] memory stablecoinAmountsToSwap = computeStablecoinAmountsToSwap(
-            stablecoinIn,
-            _totalIndexMarketCap,
-            marketCaps
-        );
+        // uint256 feeAmount = amount / feeDivisor;
+        // collectedFees += feeAmount;
+        // emit FeeCollected(msg.sender, feeAmount);
 
-        for (uint256 i = 0; i < indexTokens.length; i++) {
-            PoolKey memory poolKey = poolKeys[i];
-            uint256 stablecoinAmountToSwap = stablecoinAmountsToSwap[i];
+        // uint256 stablecoinIn = amount - feeAmount;
 
-            // Fetch the token price to compute a minimum acceptable output (with 10% slippage).
-            uint256 tokenPrice = IMarketDataFetcher(marketDataFetcherProxy).getTokenPrice(indexTokens[i], poolKey);
-            uint256 minAmountOut = (tokenPrice * stablecoinAmountToSwap * 9) / 10;
+        // uint256[] memory stablecoinAmountsToSwap = computeStablecoinAmountsToSwap(
+        //     stablecoinIn,
+        //     _totalIndexMarketCap,
+        //     marketCaps
+        // );
 
-            if (stablecoinAmountToSwap > MAX_AMOUNT_TO_SWAP) {
-                revert AmountToSwapTooBig(stablecoinAmountToSwap);
-            }
+        // for (uint256 i = 0; i < indexTokens.length; i++) {
+        //     PoolKey memory poolKey = poolKeys[i];
+        //     uint256 stablecoinAmountToSwap = stablecoinAmountsToSwap[i];
 
-            ISwapsManager(swapsManagerProxy).swap(
-                poolKey,
-                uint128(stablecoinAmountToSwap),
-                uint128(minAmountOut),
-                block.timestamp + 1 minutes,
-                true,
-                address(stablecoin)
-            );
-        }
+        //     // Fetch the token price to compute a minimum acceptable output (with 10% slippage).
+        //     uint256 tokenPrice = IMarketDataFetcher(marketDataFetcherProxy).getTokenPrice(indexTokens[i], poolKey);
+        //     uint256 minAmountOut = (tokenPrice * stablecoinAmountToSwap * 9) / 10;
 
-        uint256 sharesToMint = stablecoinIn / sharePrice;
+        //     if (stablecoinAmountToSwap > MAX_AMOUNT_TO_SWAP) {
+        //         revert AmountToSwapTooBig(stablecoinAmountToSwap);
+        //     }
 
-        IndexFundToken(indexFundToken).mint(msg.sender, uint64(sharesToMint));
-        emit SharesMinted(msg.sender, sharesToMint, stablecoinIn);
+        //     ISwapsManager(swapsManagerProxy).swap(
+        //         poolKey,
+        //         uint128(stablecoinAmountToSwap),
+        //         uint128(minAmountOut),
+        //         block.timestamp + 1 minutes,
+        //         true,
+        //         address(stablecoin)
+        //     );
+        // }
+
+        // uint256 sharesToMint = stablecoinIn / sharePrice;
+
+        // IndexFundToken(indexFundToken).mint(msg.sender, sharesToMint);
     }
 
     /**
@@ -201,7 +202,7 @@ contract ConfidentialIndexFund is IIndexFund, AccessControl, ReentrancyGuard {
      * @notice Retrieves the stablecoin contract used by the index fund.
      * @return The IERC20 stablecoin contract.
      */
-    function getStablecoin() public view returns (IERC20) {
+    function getStablecoin() public view returns (IERC20EncryptionWrapper) {
         return stablecoin;
     }
 
@@ -214,7 +215,7 @@ contract ConfidentialIndexFund is IIndexFund, AccessControl, ReentrancyGuard {
         // Reset fees before transferring to prevent reentrancy.
         collectedFees = 0;
         if (stablecoin.transfer(protocolOwner, collectedFees) == false) {
-            revert TransferFailed(address(this), protocolOwner, address(stablecoin), collectedFees);
+            revert TransferFailed();
         }
     }
 
