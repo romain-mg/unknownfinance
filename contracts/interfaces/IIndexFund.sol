@@ -4,8 +4,8 @@ pragma solidity 0.8.26;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../IndexFundToken.sol";
-import { einput } from "fhevm/lib/TFHE.sol";
-import { ERC20EncryptionWrapper } from "../ERC20Encryption/ERC20EncryptionWrapper.sol";
+import {einput} from "fhevm/lib/TFHE.sol";
+import {ERC20EncryptionWrapper} from "../ERC20Encryption/ERC20EncryptionWrapper.sol";
 
 interface IIndexFund {
     error InsufficientAllowance(address token);
@@ -26,15 +26,16 @@ interface IIndexFund {
 
     event SharesBurned(address indexed user, uint256 indexed amount);
 
-    event SwapsPerformed();
+    event MintSwapsPerformed();
 
-    event IndexTokensRedeemed(address indexed user, address indexed token, uint256 indexed amount);
+    event BurnSwapsPerformed();
 
-    event IndexTokensSwapped(address indexed user, address indexed token, uint256 indexed amount);
+    event IndexTokensRedeemed();
 
     function mintShares(einput encryptedAmount, bytes calldata inputProof) external;
 
-    function burnShares(einput encryptedAmount, einput encryptedRedeemIndexTokens, bytes calldata inputProof) external;
+    function burnShares(einput encryptedAmount, einput encryptedRedeemIndexTokens, bytes calldata inputProof)
+        external;
 
     function getIndexTokens() external view returns (address[] memory);
 

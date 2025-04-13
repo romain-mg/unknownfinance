@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
-import { IMarketDataFetcher } from "../interfaces/IMarketDataFetcher.sol";
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import {IMarketDataFetcher} from "../interfaces/IMarketDataFetcher.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract MarketDataFetcher is IMarketDataFetcher, Ownable {
     uint256 public ETH_TOTAL_SUPPLY = 120_450_000;
@@ -21,9 +21,11 @@ contract MarketDataFetcher is IMarketDataFetcher, Ownable {
      * @return totalMarketCap The aggregated market capitalization.
      * @return individualMarketCaps Array of market capitalization values for each token.
      */
-    function getIndexMarketCaps(
-        address[] calldata indexTokenAddresses
-    ) external view returns (uint256 totalMarketCap, uint256[] memory individualMarketCaps) {
+    function getIndexMarketCaps(address[] calldata indexTokenAddresses)
+        external
+        view
+        returns (uint256 totalMarketCap, uint256[] memory individualMarketCaps)
+    {
         totalMarketCap = 0;
         individualMarketCaps = new uint256[](indexTokenAddresses.length);
         for (uint256 i = 0; i < indexTokenAddresses.length; i++) {
@@ -81,7 +83,7 @@ contract MarketDataFetcher is IMarketDataFetcher, Ownable {
             /*uint80 answeredInRound*/
         ) = AggregatorV3Interface(dataFeed).latestRoundData();
         uint8 decimals = AggregatorV3Interface(dataFeed).decimals();
-        return uint256(answer / int256(int8(decimals)));
+        return uint256(answer / int256(10 ** decimals));
     }
 
     function _compareStrings(string memory a, string memory b) internal pure returns (bool) {

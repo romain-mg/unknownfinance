@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "fhevm/lib/TFHE.sol";
-import { ConfidentialERC20WithErrorsMintable } from "./ConfidentialERC20WithErrorsMintable.sol";
+import {ConfidentialERC20WithErrorsMintable} from "./ConfidentialERC20WithErrorsMintable.sol";
 
 /**
  * @title   ConfidentialERC20WithErrorsMintable.
@@ -20,11 +20,9 @@ abstract contract ConfidentialERC20WithErrorsMintableBurnable is ConfidentialERC
      * @param symbol_   Symbol.
      * @param owner_    Owner address.
      */
-    constructor(
-        string memory name_,
-        string memory symbol_,
-        address owner_
-    ) ConfidentialERC20WithErrorsMintable(name_, symbol_, owner_) {}
+    constructor(string memory name_, string memory symbol_, address owner_)
+        ConfidentialERC20WithErrorsMintable(name_, symbol_, owner_)
+    {}
 
     function burn(uint256 amount) public {
         _unsafeBurn(msg.sender, amount);

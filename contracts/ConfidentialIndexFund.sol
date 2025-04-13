@@ -1,26 +1,25 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import { IIndexFund } from "./interfaces/IIndexFund.sol";
-import { IndexFundToken } from "./IndexFundToken.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
-import { IndexFundFactory } from "./IndexFundFactory.sol";
-import { ERC20EncryptionWrapper } from "./ERC20Encryption/ERC20EncryptionWrapper.sol";
-import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
-import { IMarketDataFetcher } from "./interfaces/IMarketDataFetcher.sol";
-import { ISwapsManager } from "./interfaces/ISwapsManager.sol";
-import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import { TFHE, euint256, ebool, einput } from "fhevm/lib/TFHE.sol";
-import {
-    ConfidentialERC20WithErrorsMintableBurnable
-} from "./ERC20Encryption/ConfidentialERC20WithErrorsMintableBurnable.sol";
-import { ConfidentialERC20WithErrors } from "./ERC20Encryption/ConfidentialERC20WithErrors.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { MarketDataFetcher } from "./marketData/MarketDataFetcher.sol";
+import {IIndexFund} from "./interfaces/IIndexFund.sol";
+import {IndexFundToken} from "./IndexFundToken.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {IndexFundFactory} from "./IndexFundFactory.sol";
+import {ERC20EncryptionWrapper} from "./ERC20Encryption/ERC20EncryptionWrapper.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {IMarketDataFetcher} from "./interfaces/IMarketDataFetcher.sol";
+import {ISwapsManager} from "./interfaces/ISwapsManager.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {TFHE, euint256, ebool, einput} from "fhevm/lib/TFHE.sol";
+import {ConfidentialERC20WithErrorsMintableBurnable} from
+    "./ERC20Encryption/ConfidentialERC20WithErrorsMintableBurnable.sol";
+import {ConfidentialERC20WithErrors} from "./ERC20Encryption/ConfidentialERC20WithErrors.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {MarketDataFetcher} from "./marketData/MarketDataFetcher.sol";
 import "fhevm/lib/TFHE.sol";
-import { SepoliaZamaFHEVMConfig } from "fhevm/config/ZamaFHEVMConfig.sol";
-import { SepoliaZamaGatewayConfig } from "fhevm/config/ZamaGatewayConfig.sol";
+import {SepoliaZamaFHEVMConfig} from "fhevm/config/ZamaFHEVMConfig.sol";
+import {SepoliaZamaGatewayConfig} from "fhevm/config/ZamaGatewayConfig.sol";
 import "fhevm/gateway/GatewayCaller.sol";
 /**
  * @title IndexFund
@@ -74,9 +73,12 @@ contract ConfidentialIndexFund is
     // Maximum stablecoin amount allowed to be swapped in one transaction.
     uint128 constant MAX_AMOUNT_TO_SWAP = 2 ** 128 - 1;
 
-    uint8 pendingSwapsCounter;
+    uint8 pendingStablecoinToTokenSwapsCounter;
 
-    mapping(address => uint256) tokenToPendingSwapsAmount;
+    uint8 pendingTokenToStablecoinSwapsCounter;
+
+    mapping(address => uint256) tokenToPendingStablecoinSwapsAmount;
+    mapping(address => uint256) tokenToPendingTokenSwapsAmount;
 
     modifier onlyIndexFundFactoryOwner() {
         require(msg.sender == protocolOwner, "Only the protocol owner can call this function");
@@ -134,13 +136,8 @@ contract ConfidentialIndexFund is
 
         uint256[] memory cts = new uint256[](1);
         cts[0] = Gateway.toUint256(amount);
-        uint256 requestID = Gateway.requestDecryption(
-            cts,
-            this.mintSharesCallback.selector,
-            0,
-            block.timestamp + 100,
-            false
-        );
+        uint256 requestID =
+            Gateway.requestDecryption(cts, this.mintSharesCallback.selector, 0, block.timestamp + 100, false);
         addParamsAddress(requestID, msg.sender);
     }
 
@@ -148,8 +145,8 @@ contract ConfidentialIndexFund is
         address[] memory params = getParamsAddress(requestID);
         address user = params[0];
         stablecoin.withdrawTo(address(this), decryptedAmount);
-        (uint256 _totalIndexMarketCap, uint256[] memory marketCaps) = IMarketDataFetcher(marketDataFetcher)
-            .getIndexMarketCaps(indexTokens);
+        (uint256 _totalIndexMarketCap, uint256[] memory marketCaps) =
+            IMarketDataFetcher(marketDataFetcher).getIndexMarketCaps(indexTokens);
         totalIndexMarketCap = _totalIndexMarketCap;
 
         uint256 feeDivisor = IndexFundFactory(indexFundFactory).feeDivisor();
@@ -159,26 +156,29 @@ contract ConfidentialIndexFund is
 
         uint256 stablecoinIn = decryptedAmount - feeAmount;
 
-        uint256[] memory stablecoinAmountsToSwap = computeStablecoinAmountsToSwap(
-            stablecoinIn,
-            _totalIndexMarketCap,
-            marketCaps
-        );
+        uint256[] memory stablecoinAmountsToSwap =
+            computeStablecoinAmountsToSwap(stablecoinIn, _totalIndexMarketCap, marketCaps);
 
-        pendingSwapsCounter++;
+        pendingStablecoinToTokenSwapsCounter++;
 
         for (uint256 i = 0; i < indexTokens.length; i++) {
-            tokenToPendingSwapsAmount[indexTokens[i]] += stablecoinAmountsToSwap[i];
+            tokenToPendingStablecoinSwapsAmount[indexTokens[i]] += stablecoinAmountsToSwap[i];
         }
-        if (pendingSwapsCounter == 2) {
-            pendingSwapsCounter = 0;
+        if (pendingStablecoinToTokenSwapsCounter == 2) {
+            pendingStablecoinToTokenSwapsCounter = 0;
             for (uint256 i = 0; i < indexTokens.length; i++) {
+                address currentlyProcessedToken = indexTokens[i];
                 PoolKey memory poolKey = poolKeys[i];
-                uint256 stablecoinAmountToSwap = tokenToPendingSwapsAmount[indexTokens[i]];
+                uint256 stablecoinAmountToSwap = tokenToPendingStablecoinSwapsAmount[currentlyProcessedToken];
 
-                // Fetch the token price to compute a minimum acceptable output (with 10% slippage).
-                uint256 tokenPrice = IMarketDataFetcher(marketDataFetcher).getTokenPrice(indexTokens[i]);
-                uint256 minAmountOut = (tokenPrice * stablecoinAmountToSwap * 9) / 10;
+                uint256 decimals;
+                if (currentlyProcessedToken == address(0)) {
+                    decimals = 18;
+                } else {
+                    decimals = ERC20(currentlyProcessedToken).decimals();
+                }
+                uint256 tokenPrice = IMarketDataFetcher(marketDataFetcher).getTokenPrice(currentlyProcessedToken);
+                uint256 minAmountOut = (tokenPrice * 9 * stablecoinAmountToSwap) / 10 / (10 ** decimals);
 
                 if (stablecoinAmountToSwap > MAX_AMOUNT_TO_SWAP) {
                     revert AmountToSwapTooBig(stablecoinAmountToSwap);
@@ -193,7 +193,7 @@ contract ConfidentialIndexFund is
                     address(stablecoin)
                 );
             }
-            emit SwapsPerformed();
+            emit MintSwapsPerformed();
         }
 
         uint256 sharesToMint = stablecoinIn / sharePrice;
@@ -208,12 +208,12 @@ contract ConfidentialIndexFund is
      * @param encryptedAmount The encrypted amount of shares to be burned.
      * @param encryptedRedeemIndexTokens The encrypted flag indicating whether to redeem index tokens.
      * @param inputProof The proof for the encrypted amount.
+     * NEED TO FIX: NO PRIVACY IN SWAPS FOR NOW, NEED TO BATCH SWAPS IN THE CASE WHERE THE USER CHOOSES TO NOT REDEEM THE TOKENS
      */
-    function burnShares(
-        einput encryptedAmount,
-        einput encryptedRedeemIndexTokens,
-        bytes calldata inputProof
-    ) external nonReentrant {
+    function burnShares(einput encryptedAmount, einput encryptedRedeemIndexTokens, bytes calldata inputProof)
+        external
+        nonReentrant
+    {
         euint256 amount = TFHE.asEuint256(encryptedAmount, inputProof);
         ebool redeemIndexTokens = TFHE.asEbool(encryptedRedeemIndexTokens, inputProof);
         euint256 encryptedIndexTokenBalance = indexFundToken.balanceOf(msg.sender);
@@ -233,13 +233,8 @@ contract ConfidentialIndexFund is
         cts[0] = Gateway.toUint256(amount);
         cts[1] = Gateway.toUint256(redeemIndexTokens);
         cts[2] = Gateway.toUint256(hasUserEnoughSharesToBurn);
-        uint256 requestID = Gateway.requestDecryption(
-            cts,
-            this.burnSharesCallback.selector,
-            0,
-            block.timestamp + 100,
-            false
-        );
+        uint256 requestID =
+            Gateway.requestDecryption(cts, this.burnSharesCallback.selector, 0, block.timestamp + 100, false);
         addParamsAddress(requestID, msg.sender);
     }
 
@@ -262,8 +257,7 @@ contract ConfidentialIndexFund is
             uint256 tokenAmountToRedeemOrSwap;
             if (token != address(0)) {
                 tokenAmountToRedeemOrSwap =
-                    (IERC20(token).balanceOf(address(this)) * decryptedAmount) /
-                    indexFundToken.totalSupply();
+                    (IERC20(token).balanceOf(address(this)) * decryptedAmount) / indexFundToken.totalSupply();
             } else {
                 // Handle the case where the token is ethereum
                 tokenAmountToRedeemOrSwap = (address(this).balance * decryptedAmount) / indexFundToken.totalSupply();
@@ -271,21 +265,44 @@ contract ConfidentialIndexFund is
             // If the user wants to redeem index tokens, transfer the corresponding amount.
             if (redeemIndexTokens) {
                 IERC20(token).transfer(user, tokenAmountToRedeemOrSwap);
-                emit IndexTokensRedeemed(user, token, tokenAmountToRedeemOrSwap);
+                emit IndexTokensRedeemed();
             } else {
-                stablecoinToSendBack += ISwapsManager(swapsManagerProxy).swap(
-                    poolKeys[i],
-                    uint128(tokenAmountToRedeemOrSwap),
-                    0,
-                    block.timestamp + 1 minutes,
-                    true,
-                    address(stablecoin)
-                );
-                emit IndexTokensSwapped(user, token, tokenAmountToRedeemOrSwap);
+                address currentlyProcessedToken = indexTokens[i];
+                pendingTokenToStablecoinSwapsCounter++;
+                tokenToPendingTokenSwapsAmount[currentlyProcessedToken] += tokenAmountToRedeemOrSwap;
+                if (pendingTokenToStablecoinSwapsCounter == 2) {
+                    pendingTokenToStablecoinSwapsCounter = 0;
+                    uint256 tokenAmountToSwap = tokenToPendingTokenSwapsAmount[currentlyProcessedToken];
+
+                    uint256 decimals;
+                    if (currentlyProcessedToken == address(0)) {
+                        decimals = 18;
+                    } else {
+                        decimals = ERC20(currentlyProcessedToken).decimals();
+                    }
+                    uint256 tokenPrice = IMarketDataFetcher(marketDataFetcher).getTokenPrice(currentlyProcessedToken);
+                    uint256 minAmountOut = (tokenPrice * 9 * tokenAmountToSwap) / 10 / (10 ** decimals);
+
+                    if (tokenAmountToSwap > MAX_AMOUNT_TO_SWAP) {
+                        revert AmountToSwapTooBig(tokenAmountToSwap);
+                    }
+
+                    stablecoinToSendBack += ISwapsManager(swapsManagerProxy).swap(
+                        poolKeys[i],
+                        uint128(tokenAmountToRedeemOrSwap),
+                        uint128(minAmountOut),
+                        block.timestamp + 1 minutes,
+                        true,
+                        currentlyProcessedToken
+                    );
+
+                    emit BurnSwapsPerformed();
+
+                    if (stablecoinToSendBack > 0) {
+                        stablecoin.transferFrom(address(this), msg.sender, TFHE.asEuint256(stablecoinToSendBack));
+                    }
+                }
             }
-        }
-        if (stablecoinToSendBack > 0) {
-            stablecoin.transferFrom(address(this), msg.sender, TFHE.asEuint256(stablecoinToSendBack));
         }
     }
 
@@ -370,9 +387,7 @@ contract ConfidentialIndexFund is
             amounts[i] = (totalAmount * marketCaps[i]) / _totalIndexMarketCap;
             // Approve token for swapping with a permit valid for 1 day.
             ISwapsManager(swapsManagerProxy).approveTokenWithPermit2(
-                indexTokens[i],
-                uint160(amounts[i]),
-                uint48(block.timestamp + 1 days)
+                indexTokens[i], uint160(amounts[i]), uint48(block.timestamp + 1 days)
             );
         }
         return amounts;
