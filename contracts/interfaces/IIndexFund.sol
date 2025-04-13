@@ -18,6 +18,8 @@ interface IIndexFund {
 
     error TransferFailed();
 
+    error NotEnoughSharesToBurn(address user, uint256 amountToBurn);
+
     event FeeCollected(uint256 indexed feeAmount);
 
     event SharesMinted(address indexed user, uint256 indexed amount);
@@ -26,9 +28,13 @@ interface IIndexFund {
 
     event SwapsPerformed();
 
+    event IndexTokensRedeemed(address indexed user, address indexed token, uint256 indexed amount);
+
+    event IndexTokensSwapped(address indexed user, address indexed token, uint256 indexed amount);
+
     function mintShares(einput encryptedAmount, bytes calldata inputProof) external;
 
-    function burnShares(uint256 amount, bool redeemIndexTokens) external;
+    function burnShares(einput encryptedAmount, einput encryptedRedeemIndexTokens, bytes calldata inputProof) external;
 
     function getIndexTokens() external view returns (address[] memory);
 

@@ -12,7 +12,9 @@ import { IMarketDataFetcher } from "./interfaces/IMarketDataFetcher.sol";
 import { ISwapsManager } from "./interfaces/ISwapsManager.sol";
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import { TFHE, euint256, ebool, einput } from "fhevm/lib/TFHE.sol";
-import { ConfidentialERC20WithErrorsMintable } from "./ERC20Encryption/ConfidentialERC20WithErrorsMintable.sol";
+import {
+    ConfidentialERC20WithErrorsMintableBurnable
+} from "./ERC20Encryption/ConfidentialERC20WithErrorsMintableBurnable.sol";
 import { ConfidentialERC20WithErrors } from "./ERC20Encryption/ConfidentialERC20WithErrors.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { MarketDataFetcher } from "./marketData/MarketDataFetcher.sol";
@@ -121,12 +123,8 @@ contract ConfidentialIndexFund is
     function mintShares(einput encryptedAmount, bytes calldata inputProof) external nonReentrant {
         euint256 amount = TFHE.asEuint256(encryptedAmount, inputProof);
 
-        // NE MARCHE PAS CAR LA FONCTION RETURN TOUJOURS TRUE
-        if (!stablecoin.transferFrom(msg.sender, address(this), amount)) {
-            revert TransferFailed();
-        }
-
-        // DONC LA SOLUTION EST
+        // WORKS ONLY WITH UNENCRYPTED ERROR CODES -> LET IT LIKE THIS OR FIND ANOTHER SOLUTION?
+        stablecoin.transferFrom(msg.sender, address(this), amount);
         uint256 transferErrorId = stablecoin.errorGetCounter() - 1;
         uint8 tramsferErrorCode = stablecoin.getErrorCodeForTransferId(transferErrorId);
         uint8 noErrorCode = uint8(ConfidentialERC20WithErrors.ErrorCodes.NO_ERROR);
@@ -207,20 +205,108 @@ contract ConfidentialIndexFund is
     /**
      * @notice Burns a specified amount of index fund shares.
      * @dev Function implementation is pending.
-     * @param amount The number of shares to burn.
+     * @param encryptedAmount The encrypted amount of shares to be burned.
+     * @param encryptedRedeemIndexTokens The encrypted flag indicating whether to redeem index tokens.
+     * @param inputProof The proof for the encrypted amount.
      */
-    function burnShares(uint256 amount, bool redeemIndexTokens) external {
-        require(amount > 0, "Amount must be greater than 0");
+    function burnShares(
+        einput encryptedAmount,
+        einput encryptedRedeemIndexTokens,
+        bytes calldata inputProof
+    ) external nonReentrant {
+        euint256 amount = TFHE.asEuint256(encryptedAmount, inputProof);
+        ebool redeemIndexTokens = TFHE.asEbool(encryptedRedeemIndexTokens, inputProof);
+        euint256 encryptedIndexTokenBalance = indexFundToken.balanceOf(msg.sender);
 
-        euint256 encryptedAmount = TFHE.asEuint256(amount);
-        // require(TFHE.le(encryptedAmount, indexFundToken.balanceOf(msg.sender)), "Amount too big");
+        ebool hasUserEnoughSharesToBurn = TFHE.le(amount, encryptedIndexTokenBalance);
+
+        // Transfer the shares to be burned from the user to this contract.
+        indexFundToken.transferFrom(msg.sender, address(this), amount);
+        uint256 transferErrorId = indexFundToken.errorGetCounter() - 1;
+        uint8 tramsferErrorCode = indexFundToken.getErrorCodeForTransferId(transferErrorId);
+        uint8 noErrorCode = uint8(ConfidentialERC20WithErrors.ErrorCodes.NO_ERROR);
+        if (tramsferErrorCode != noErrorCode) {
+            revert TransferFailed();
+        }
+
+        uint256[] memory cts = new uint256[](3);
+        cts[0] = Gateway.toUint256(amount);
+        cts[1] = Gateway.toUint256(redeemIndexTokens);
+        cts[2] = Gateway.toUint256(hasUserEnoughSharesToBurn);
+        uint256 requestID = Gateway.requestDecryption(
+            cts,
+            this.burnSharesCallback.selector,
+            0,
+            block.timestamp + 100,
+            false
+        );
+        addParamsAddress(requestID, msg.sender);
+    }
+
+    function burnSharesCallback(
+        uint256 requestID,
+        uint256 decryptedAmount,
+        bool redeemIndexTokens,
+        bool hasUserEnoughSharesToBurn
+    ) public onlyGateway {
+        address[] memory params = getParamsAddress(requestID);
+        address user = params[0];
+        if (!hasUserEnoughSharesToBurn) {
+            revert NotEnoughSharesToBurn(user, decryptedAmount);
+        }
+        uint256 stablecoinToSendBack;
+        indexFundToken.burn(decryptedAmount);
+        emit SharesBurned(msg.sender, decryptedAmount);
+        for (uint256 i = 0; i < indexTokens.length; i++) {
+            address token = indexTokens[i];
+            uint256 tokenAmountToRedeemOrSwap;
+            if (token != address(0)) {
+                tokenAmountToRedeemOrSwap =
+                    (IERC20(token).balanceOf(address(this)) * decryptedAmount) /
+                    indexFundToken.totalSupply();
+            } else {
+                // Handle the case where the token is ethereum
+                tokenAmountToRedeemOrSwap = (address(this).balance * decryptedAmount) / indexFundToken.totalSupply();
+            }
+            // If the user wants to redeem index tokens, transfer the corresponding amount.
+            if (redeemIndexTokens) {
+                IERC20(token).transfer(user, tokenAmountToRedeemOrSwap);
+                emit IndexTokensRedeemed(user, token, tokenAmountToRedeemOrSwap);
+            } else {
+                stablecoinToSendBack += ISwapsManager(swapsManagerProxy).swap(
+                    poolKeys[i],
+                    uint128(tokenAmountToRedeemOrSwap),
+                    0,
+                    block.timestamp + 1 minutes,
+                    true,
+                    address(stablecoin)
+                );
+                emit IndexTokensSwapped(user, token, tokenAmountToRedeemOrSwap);
+            }
+        }
+        if (stablecoinToSendBack > 0) {
+            stablecoin.transferFrom(address(this), msg.sender, TFHE.asEuint256(stablecoinToSendBack));
+        }
     }
 
     /**
      * @notice Computes the current value per share based on market data.
-     * @dev Function implementation is pending.
      */
-    function computeShareValue() external {}
+    function computeShareValue() external view returns (uint256 shareValue) {
+        uint256 totalValue = 0;
+        for (uint256 i = 0; i < indexTokens.length; i++) {
+            uint256 tokenPrice = IMarketDataFetcher(marketDataFetcher).getTokenPrice(indexTokens[i]);
+            uint256 tokenAmount = IERC20(indexTokens[i]).balanceOf(address(this));
+            uint256 tokenDecimals;
+            if (indexTokens[i] == address(0)) {
+                tokenDecimals = 18;
+            } else {
+                tokenDecimals = ERC20(indexTokens[i]).decimals();
+            }
+            totalValue += (tokenPrice * tokenAmount) / (10 ** tokenDecimals);
+            shareValue = totalValue / indexFundToken.totalSupply();
+        }
+    }
 
     /**
      * @notice Retrieves the list of index token addresses.
