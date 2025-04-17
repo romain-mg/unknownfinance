@@ -2,8 +2,8 @@
 pragma solidity ^0.8.24;
 
 import "fhevm/lib/TFHE.sol";
-import {ConfidentialERC20} from "./ConfidentialERC20.sol";
-import {TFHE, euint8} from "fhevm/lib/TFHE.sol";
+import "@httpz-contracts/token/ERC20/ConfidentialERC20.sol";
+import {TFHE, euint8, euint64} from "fhevm/lib/TFHE.sol";
 import "fhevm/gateway/GatewayCaller.sol";
 import {SepoliaZamaFHEVMConfig} from "fhevm/config/ZamaFHEVMConfig.sol";
 import {SepoliaZamaGatewayConfig} from "fhevm/config/ZamaGatewayConfig.sol";
@@ -17,7 +17,7 @@ import {SepoliaZamaGatewayConfig} from "fhevm/config/ZamaGatewayConfig.sol";
  *          The total supply is not encrypted.
  *          It also supports error handling for encrypted errors.
  */
-abstract contract ConfidentialERC20WithErrors is
+abstract contract ConfidentialERC20WithTransparentErrors is
     ConfidentialERC20,
     SepoliaZamaFHEVMConfig,
     SepoliaZamaGatewayConfig,
@@ -50,7 +50,7 @@ abstract contract ConfidentialERC20WithErrors is
     /**
      * @notice See {IConfidentialERC20-transfer}.
      */
-    function transfer(address to, euint256 amount) public override returns (bool) {
+    function transfer(address to, euint64 amount) public override returns (bool) {
         _isSenderAllowedForAmount(amount);
         /// @dev Check whether the owner has enough tokens.
         ebool canTransfer = TFHE.le(amount, _balances[msg.sender]);
@@ -67,7 +67,7 @@ abstract contract ConfidentialERC20WithErrors is
     /**
      * @notice See {IConfidentialERC20-transferFrom}.
      */
-    function transferFrom(address from, address to, euint256 amount) public override returns (bool) {
+    function transferFrom(address from, address to, euint64 amount) public override returns (bool) {
         _isSenderAllowedForAmount(amount);
         address spender = msg.sender;
         ebool isTransferable = _updateAllowance(from, spender, amount);
@@ -92,19 +92,19 @@ abstract contract ConfidentialERC20WithErrors is
         return _errorCounter;
     }
 
-    function _transfer(address from, address to, euint256 amount, ebool isTransferable) internal override {
+    function _transfer(address from, address to, euint64 amount, ebool isTransferable) internal override {
         _transferNoEvent(from, to, amount, isTransferable);
         /// @dev It was incremented in _saveError.
         emit Transfer(from, to, errorGetCounter() - 1);
     }
 
-    function _updateAllowance(address owner, address spender, euint256 amount)
+    function _updateAllowance(address owner, address spender, euint64 amount)
         internal
         virtual
         override
         returns (ebool isTransferable)
     {
-        euint256 currentAllowance = _allowance(owner, spender);
+        euint64 currentAllowance = _allowance(owner, spender);
         /// @dev It checks whether the allowance suffices.
         ebool allowedTransfer = TFHE.le(amount, currentAllowance);
         euint8 errorCode = TFHE.select(

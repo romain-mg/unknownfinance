@@ -6,21 +6,23 @@ import {IndexFundToken} from "./IndexFundToken.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {IndexFundFactory} from "./IndexFundFactory.sol";
-import {ERC20EncryptionWrapper} from "./ERC20Encryption/ERC20EncryptionWrapper.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {IMarketDataFetcher} from "./interfaces/IMarketDataFetcher.sol";
-import {ISwapsManager} from "./interfaces/ISwapsManager.sol";
+import {SwapsManager} from "./swaps/SwapsManager.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {TFHE, euint256, ebool, einput} from "fhevm/lib/TFHE.sol";
-import {ConfidentialERC20WithErrorsMintableBurnable} from
-    "./ERC20Encryption/ConfidentialERC20WithErrorsMintableBurnable.sol";
-import {ConfidentialERC20WithErrors} from "./ERC20Encryption/ConfidentialERC20WithErrors.sol";
+import {TFHE, euint64, ebool, einput} from "fhevm/lib/TFHE.sol";
+import {ConfidentialERC20WithTransparentErrorsMintableBurnable} from
+    "./ERC20Encryption/ConfidentialERC20WithTransparentErrorsMintableBurnable.sol";
+import {ConfidentialERC20WithTransparentErrors} from "./ERC20Encryption/ConfidentialERC20WithTransparentErrors.sol";
+import {ConfidentialERC20WithTransparentErrorsWrapped} from
+    "./ERC20Encryption/ConfidentialERC20WithTransparentErrorsWrapped.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {MarketDataFetcher} from "./marketData/MarketDataFetcher.sol";
 import "fhevm/lib/TFHE.sol";
 import {SepoliaZamaFHEVMConfig} from "fhevm/config/ZamaFHEVMConfig.sol";
 import {SepoliaZamaGatewayConfig} from "fhevm/config/ZamaGatewayConfig.sol";
 import "fhevm/gateway/GatewayCaller.sol";
+import {ConfidentialERC20Wrapped} from "@httpz-contracts/token/ERC20/ConfidentialERC20Wrapped.sol";
 /**
  * @title IndexFund
  * @notice This contract implements an index fund where users can mint shares by depositing stablecoin.
@@ -53,7 +55,7 @@ contract ConfidentialIndexFund is
     address immutable indexFundFactory;
 
     // Stablecoin used for minting shares.
-    ERC20EncryptionWrapper immutable stablecoin;
+    ConfidentialERC20WithTransparentErrorsWrapped immutable stablecoin;
 
     // Transparent version of the stablecoin used for minting shares.
     ERC20 immutable decypheredStablecoin;
@@ -71,7 +73,9 @@ contract ConfidentialIndexFund is
     uint256 collectedFees;
 
     // Maximum stablecoin amount allowed to be swapped in one transaction.
-    uint128 constant MAX_AMOUNT_TO_SWAP = 2 ** 128 - 1;
+    uint128 constant MAX_AMOUNT_TO_SWAP = type(uint128).max;
+
+    uint128 constant MAX_AMOUNT_TO_MINT_OR_BURN = type(uint64).max;
 
     uint8 pendingStablecoinToTokenSwapsCounter;
 
@@ -106,7 +110,7 @@ contract ConfidentialIndexFund is
         PoolKey[] memory _poolKeys
     ) {
         indexTokens = _indexTokens;
-        stablecoin = ERC20EncryptionWrapper(_stablecoin);
+        stablecoin = ConfidentialERC20WithTransparentErrorsWrapped(_stablecoin);
         indexFundFactory = _indexFundFactory;
         indexFundToken = IndexFundToken(_indexFundToken);
         marketDataFetcher = MarketDataFetcher(_marketDataFetcher);
@@ -123,13 +127,13 @@ contract ConfidentialIndexFund is
      * @param encryptedAmount The encrypted amount of stablecoin the user is depositing.
      */
     function mintShares(einput encryptedAmount, bytes calldata inputProof) external nonReentrant {
-        euint256 amount = TFHE.asEuint256(encryptedAmount, inputProof);
+        euint64 amount = TFHE.asEuint64(encryptedAmount, inputProof);
 
         // WORKS ONLY WITH UNENCRYPTED ERROR CODES -> LET IT LIKE THIS OR FIND ANOTHER SOLUTION?
         stablecoin.transferFrom(msg.sender, address(this), amount);
         uint256 transferErrorId = stablecoin.errorGetCounter() - 1;
         uint8 tramsferErrorCode = stablecoin.getErrorCodeForTransferId(transferErrorId);
-        uint8 noErrorCode = uint8(ConfidentialERC20WithErrors.ErrorCodes.NO_ERROR);
+        uint8 noErrorCode = uint8(ConfidentialERC20WithTransparentErrors.ErrorCodes.NO_ERROR);
         if (tramsferErrorCode != noErrorCode) {
             revert TransferFailed();
         }
@@ -141,10 +145,48 @@ contract ConfidentialIndexFund is
         addParamsAddress(requestID, msg.sender);
     }
 
-    function mintSharesCallback(uint256 requestID, uint256 decryptedAmount) public onlyGateway {
+    /**
+     * @notice Burns a specified amount of index fund shares.
+     * @dev Function implementation is pending.
+     * @param encryptedAmount The encrypted amount of shares to be burned.
+     * @param encryptedRedeemIndexTokens The encrypted flag indicating whether to redeem index tokens.
+     * @param inputProof The proof for the encrypted amount.
+     */
+    function burnShares(einput encryptedAmount, einput encryptedRedeemIndexTokens, bytes calldata inputProof)
+        external
+        nonReentrant
+    {
+        euint64 amount = TFHE.asEuint64(encryptedAmount, inputProof);
+        ebool redeemIndexTokens = TFHE.asEbool(encryptedRedeemIndexTokens, inputProof);
+        euint64 encryptedIndexTokenBalance = indexFundToken.balanceOf(msg.sender);
+
+        ebool hasUserEnoughSharesToBurn = TFHE.le(amount, encryptedIndexTokenBalance);
+
+        // Transfer the shares to be burned from the user to this contract.
+        indexFundToken.transferFrom(msg.sender, address(this), amount);
+        uint256 transferErrorId = indexFundToken.errorGetCounter() - 1;
+        uint8 tramsferErrorCode = indexFundToken.getErrorCodeForTransferId(transferErrorId);
+        uint8 noErrorCode = uint8(ConfidentialERC20WithTransparentErrors.ErrorCodes.NO_ERROR);
+        if (tramsferErrorCode != noErrorCode) {
+            revert TransferFailed();
+        }
+
+        uint256[] memory cts = new uint256[](3);
+        cts[0] = Gateway.toUint256(amount);
+        cts[1] = Gateway.toUint256(redeemIndexTokens);
+        cts[2] = Gateway.toUint256(hasUserEnoughSharesToBurn);
+        uint256 requestID =
+            Gateway.requestDecryption(cts, this.burnSharesCallback.selector, 0, block.timestamp + 100, false);
+        addParamsAddress(requestID, msg.sender);
+    }
+
+    function mintSharesCallback(uint256 requestID, uint64 decryptedAmount) public nonReentrant onlyGateway {
         address[] memory params = getParamsAddress(requestID);
         address user = params[0];
-        stablecoin.withdrawTo(address(this), decryptedAmount);
+        if (decryptedAmount > MAX_AMOUNT_TO_MINT_OR_BURN) {
+            revert SharesToMintAmountTooBig(decryptedAmount);
+        }
+        stablecoin.unwrap(decryptedAmount);
         (uint256 _totalIndexMarketCap, uint256[] memory marketCaps) =
             IMarketDataFetcher(marketDataFetcher).getIndexMarketCaps(indexTokens);
         totalIndexMarketCap = _totalIndexMarketCap;
@@ -184,7 +226,7 @@ contract ConfidentialIndexFund is
                     revert AmountToSwapTooBig(stablecoinAmountToSwap);
                 }
 
-                ISwapsManager(swapsManagerProxy).swap(
+                SwapsManager(swapsManagerProxy).swap(
                     poolKey,
                     uint128(stablecoinAmountToSwap),
                     uint128(minAmountOut),
@@ -196,54 +238,21 @@ contract ConfidentialIndexFund is
             emit MintSwapsPerformed();
         }
 
-        uint256 sharesToMint = stablecoinIn / sharePrice;
+        uint64 sharesToMint = uint64(stablecoinIn / sharePrice);
 
         IndexFundToken(indexFundToken).mint(user, sharesToMint);
         emit SharesMinted(user, sharesToMint);
     }
 
-    /**
-     * @notice Burns a specified amount of index fund shares.
-     * @dev Function implementation is pending.
-     * @param encryptedAmount The encrypted amount of shares to be burned.
-     * @param encryptedRedeemIndexTokens The encrypted flag indicating whether to redeem index tokens.
-     * @param inputProof The proof for the encrypted amount.
-     * NEED TO FIX: NO PRIVACY IN SWAPS FOR NOW, NEED TO BATCH SWAPS IN THE CASE WHERE THE USER CHOOSES TO NOT REDEEM THE TOKENS
-     */
-    function burnShares(einput encryptedAmount, einput encryptedRedeemIndexTokens, bytes calldata inputProof)
-        external
-        nonReentrant
-    {
-        euint256 amount = TFHE.asEuint256(encryptedAmount, inputProof);
-        ebool redeemIndexTokens = TFHE.asEbool(encryptedRedeemIndexTokens, inputProof);
-        euint256 encryptedIndexTokenBalance = indexFundToken.balanceOf(msg.sender);
-
-        ebool hasUserEnoughSharesToBurn = TFHE.le(amount, encryptedIndexTokenBalance);
-
-        // Transfer the shares to be burned from the user to this contract.
-        indexFundToken.transferFrom(msg.sender, address(this), amount);
-        uint256 transferErrorId = indexFundToken.errorGetCounter() - 1;
-        uint8 tramsferErrorCode = indexFundToken.getErrorCodeForTransferId(transferErrorId);
-        uint8 noErrorCode = uint8(ConfidentialERC20WithErrors.ErrorCodes.NO_ERROR);
-        if (tramsferErrorCode != noErrorCode) {
-            revert TransferFailed();
-        }
-
-        uint256[] memory cts = new uint256[](3);
-        cts[0] = Gateway.toUint256(amount);
-        cts[1] = Gateway.toUint256(redeemIndexTokens);
-        cts[2] = Gateway.toUint256(hasUserEnoughSharesToBurn);
-        uint256 requestID =
-            Gateway.requestDecryption(cts, this.burnSharesCallback.selector, 0, block.timestamp + 100, false);
-        addParamsAddress(requestID, msg.sender);
-    }
-
     function burnSharesCallback(
         uint256 requestID,
-        uint256 decryptedAmount,
+        uint64 decryptedAmount,
         bool redeemIndexTokens,
         bool hasUserEnoughSharesToBurn
-    ) public onlyGateway {
+    ) public nonReentrant onlyGateway {
+        if (decryptedAmount > MAX_AMOUNT_TO_MINT_OR_BURN) {
+            revert SharesToBurnAmountTooBig(decryptedAmount);
+        }
         address[] memory params = getParamsAddress(requestID);
         address user = params[0];
         if (!hasUserEnoughSharesToBurn) {
@@ -287,7 +296,7 @@ contract ConfidentialIndexFund is
                         revert AmountToSwapTooBig(tokenAmountToSwap);
                     }
 
-                    stablecoinToSendBack += ISwapsManager(swapsManagerProxy).swap(
+                    stablecoinToSendBack += SwapsManager(swapsManagerProxy).swap(
                         poolKeys[i],
                         uint128(tokenAmountToRedeemOrSwap),
                         uint128(minAmountOut),
@@ -299,7 +308,7 @@ contract ConfidentialIndexFund is
                     emit BurnSwapsPerformed();
 
                     if (stablecoinToSendBack > 0) {
-                        stablecoin.transferFrom(address(this), msg.sender, TFHE.asEuint256(stablecoinToSendBack));
+                        stablecoin.transferFrom(address(this), msg.sender, TFHE.asEuint64(stablecoinToSendBack));
                     }
                 }
             }
@@ -345,7 +354,7 @@ contract ConfidentialIndexFund is
      * @notice Retrieves the stablecoin contract used by the index fund.
      * @return The IERC20 stablecoin contract.
      */
-    function getStablecoin() public view returns (ERC20EncryptionWrapper) {
+    function getStablecoin() public view returns (ConfidentialERC20WithTransparentErrorsWrapped) {
         return stablecoin;
     }
 
@@ -386,7 +395,7 @@ contract ConfidentialIndexFund is
             // Calculate proportional swap amount.
             amounts[i] = (totalAmount * marketCaps[i]) / _totalIndexMarketCap;
             // Approve token for swapping with a permit valid for 1 day.
-            ISwapsManager(swapsManagerProxy).approveTokenWithPermit2(
+            SwapsManager(swapsManagerProxy).approveTokenWithPermit2(
                 indexTokens[i], uint160(amounts[i]), uint48(block.timestamp + 1 days)
             );
         }
