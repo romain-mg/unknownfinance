@@ -32,7 +32,6 @@ abstract contract ConfidentialERC20WithTransparentErrorsMintableBurnable is
 
     function _unsafeBurn(address account, uint64 amount) internal {
         _unsafeBurnNoEvent(account, amount);
-        emit Transfer(account, address(0), _PLACEHOLDER);
     }
 
     /**

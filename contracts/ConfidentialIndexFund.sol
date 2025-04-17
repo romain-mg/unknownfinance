@@ -102,6 +102,7 @@ contract ConfidentialIndexFund is
     constructor(
         address[] memory _indexTokens,
         address _stablecoin,
+        address _decypheredStablecoin,
         address _indexFundFactory,
         address _indexFundToken,
         address _marketDataFetcher,
@@ -111,6 +112,7 @@ contract ConfidentialIndexFund is
     ) {
         indexTokens = _indexTokens;
         stablecoin = ConfidentialERC20WithTransparentErrorsWrapped(_stablecoin);
+        decypheredStablecoin = ERC20(_decypheredStablecoin);
         indexFundFactory = _indexFundFactory;
         indexFundToken = IndexFundToken(_indexFundToken);
         marketDataFetcher = MarketDataFetcher(_marketDataFetcher);
