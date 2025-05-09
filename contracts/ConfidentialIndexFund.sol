@@ -1,33 +1,34 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {IIndexFund} from "./interfaces/IIndexFund.sol";
-import {IndexFundToken} from "./IndexFundToken.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {IndexFundFactory} from "./IndexFundFactory.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import {IMarketDataFetcher} from "./interfaces/IMarketDataFetcher.sol";
-import {SwapsManager} from "./swaps/SwapsManager.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {TFHE, euint64, ebool, einput} from "fhevm/lib/TFHE.sol";
-import {ConfidentialERC20WithTransparentErrorsMintableBurnable} from
-    "./ERC20Encryption/ConfidentialERC20WithTransparentErrorsMintableBurnable.sol";
-import {ConfidentialERC20WithTransparentErrors} from "./ERC20Encryption/ConfidentialERC20WithTransparentErrors.sol";
-import {ConfidentialERC20WithTransparentErrorsWrapped} from
-    "./ERC20Encryption/ConfidentialERC20WithTransparentErrorsWrapped.sol";
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {MarketDataFetcher} from "./marketData/MarketDataFetcher.sol";
+import { IIndexFund } from "./interfaces/IIndexFund.sol";
+import { IndexFundToken } from "./IndexFundToken.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
+import { IndexFundFactory } from "./IndexFundFactory.sol";
+import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
+import { IMarketDataFetcher } from "./interfaces/IMarketDataFetcher.sol";
+import { SwapsManager } from "./swaps/SwapsManager.sol";
+import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import { TFHE, euint64, ebool, einput } from "fhevm/lib/TFHE.sol";
+import {
+    ConfidentialERC20WithErrorsMintableBurnable
+} from "./ERC20Encryption/ConfidentialERC20WithErrorsMintableBurnable.sol";
+import { ConfidentialERC20WithErrorsWrapped } from "./ERC20Encryption/ConfidentialERC20WithErrorsWrapped.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { MarketDataFetcher } from "./marketData/MarketDataFetcher.sol";
 import "fhevm/lib/TFHE.sol";
-import {SepoliaZamaFHEVMConfig} from "fhevm/config/ZamaFHEVMConfig.sol";
-import {SepoliaZamaGatewayConfig} from "fhevm/config/ZamaGatewayConfig.sol";
+import { SepoliaZamaFHEVMConfig } from "fhevm/config/ZamaFHEVMConfig.sol";
+import { SepoliaZamaGatewayConfig } from "fhevm/config/ZamaGatewayConfig.sol";
+import { ConfidentialERC20WithErrors } from "@httpz-contracts/token/ERC20/extensions/ConfidentialERC20WithErrors.sol";
 import "fhevm/gateway/GatewayCaller.sol";
-import {ConfidentialERC20Wrapped} from "@httpz-contracts/token/ERC20/ConfidentialERC20Wrapped.sol";
+import { IndexFundStateManagement } from "./lib/IndexFundStateManagement.sol";
+import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
+
 /**
  * @title IndexFund
  * @notice This contract implements an index fund where users can mint shares by depositing stablecoin.
  */
-
 contract ConfidentialIndexFund is
     IIndexFund,
     AccessControl,
@@ -36,53 +37,14 @@ contract ConfidentialIndexFund is
     SepoliaZamaGatewayConfig,
     GatewayCaller
 {
-    // Array of tokens that compose the index fund.
-    address[] indexTokens;
+    using IndexFundStateManagement for IndexFundStateManagement.IndexFundState;
 
-    // Array of pool keys corresponding to each index token (used for swap operations).
-    PoolKey[] poolKeys;
-
-    // Token representing shares in the index fund.
-    IndexFundToken immutable indexFundToken;
-
-    // Address of the market data fetcher.
-    MarketDataFetcher immutable marketDataFetcher;
-
-    // Address of the swaps manager proxy.
-    address immutable swapsManagerProxy;
-
-    // Address of the index fund factory.
-    address immutable indexFundFactory;
-
-    // Stablecoin used for minting shares.
-    ConfidentialERC20WithTransparentErrorsWrapped immutable stablecoin;
-
-    // Transparent version of the stablecoin used for minting shares.
-    ERC20 immutable decypheredStablecoin;
-
-    // Current share price in terms of the stablecoin.
-    uint256 sharePrice;
-
-    // Total market capitalization of all index tokens.
-    uint256 totalIndexMarketCap;
+    IndexFundStateManagement.IndexFundState private indexFundState;
 
     // Owner of the protocol, as defined by the index fund factory.
     address protocolOwner;
 
-    // Accumulated fees collected from mint operations.
-    uint256 collectedFees;
-
-    // Maximum stablecoin amount allowed to be swapped in one transaction.
-    uint128 constant MAX_AMOUNT_TO_SWAP = type(uint128).max;
-
-    uint128 constant MAX_AMOUNT_TO_MINT_OR_BURN = type(uint64).max;
-
-    uint8 pendingStablecoinToTokenSwapsCounter;
-
-    uint8 pendingTokenToStablecoinSwapsCounter;
-
-    mapping(address => uint256) tokenToPendingStablecoinSwapsAmount;
-    mapping(address => uint256) tokenToPendingTokenSwapsAmount;
+    uint256 private constant USDC_DECIMALS = 1e6;
 
     modifier onlyIndexFundFactoryOwner() {
         require(msg.sender == protocolOwner, "Only the protocol owner can call this function");
@@ -92,34 +54,43 @@ contract ConfidentialIndexFund is
     /**
      * @param _indexTokens Array of token addresses that compose the index.
      * @param _stablecoin Address of the stablecoin used for deposits.
+     * @param _decypheredStablecoin Address of the transparent version of the stablecoin.
      * @param _indexFundFactory Address of the factory contract that deploys the index fund.
-     * @param _indexFundToken Address of the token contract representing the index fund shares.
      * @param _marketDataFetcher Address of the protocol market data fetcher.
      * @param _swapsManagerProxy Address of the proxy used to manage token swaps.
      * @param _initialSharePrice Initial share price (in stablecoin units).
      * @param _poolKeys Array of pool keys used for token swaps.
+     * @param currentIndexFundsCount Current index funds count coming from the factory
      */
     constructor(
         address[] memory _indexTokens,
         address _stablecoin,
         address _decypheredStablecoin,
         address _indexFundFactory,
-        address _indexFundToken,
         address _marketDataFetcher,
         address _swapsManagerProxy,
         uint256 _initialSharePrice,
-        PoolKey[] memory _poolKeys
+        PoolKey[] memory _poolKeys,
+        uint8 _numberOfSwapsToBatch,
+        uint96 currentIndexFundsCount
     ) {
-        indexTokens = _indexTokens;
-        stablecoin = ConfidentialERC20WithTransparentErrorsWrapped(_stablecoin);
-        decypheredStablecoin = ERC20(_decypheredStablecoin);
-        indexFundFactory = _indexFundFactory;
-        indexFundToken = IndexFundToken(_indexFundToken);
-        marketDataFetcher = MarketDataFetcher(_marketDataFetcher);
-        swapsManagerProxy = _swapsManagerProxy;
-        sharePrice = _initialSharePrice;
         protocolOwner = IndexFundFactory(_indexFundFactory).owner();
-        poolKeys = _poolKeys;
+
+        indexFundState.poolKeys = _poolKeys;
+        indexFundState.marketDataFetcher = MarketDataFetcher(_marketDataFetcher);
+        indexFundState.swapsManagerProxy = _swapsManagerProxy;
+        indexFundState.MAX_AMOUNT_TO_SWAP = type(uint128).max;
+        indexFundState.MAX_AMOUNT_TO_MINT_OR_BURN = type(uint64).max;
+        indexFundState.indexFundFactory = _indexFundFactory;
+        indexFundState.indexTokens = _indexTokens;
+        indexFundState.stablecoin = ConfidentialERC20WithErrorsWrapped(_stablecoin);
+        indexFundState.decryptedStablecoin = ERC20(_decypheredStablecoin);
+        indexFundState.indexFundToken = new IndexFundToken(
+            string.concat("IndexFundToken", "_", Strings.toString(currentIndexFundsCount)),
+            string.concat("IFT", Strings.toString(currentIndexFundsCount))
+        );
+        indexFundState.sharePrice = _initialSharePrice;
+        indexFundState.numberOfSwapsToBatch = _numberOfSwapsToBatch;
     }
 
     /**
@@ -127,23 +98,26 @@ contract ConfidentialIndexFund is
      * @dev Handles fee deduction, token swaps, and share minting.
      * It fetches market data and calculates swap amounts based on token market caps.
      * @param encryptedAmount The encrypted amount of stablecoin the user is depositing.
+     * @param inputProof The proof for the encrypted amount.
      */
     function mintShares(einput encryptedAmount, bytes calldata inputProof) external nonReentrant {
+        ConfidentialERC20WithErrorsWrapped stablecoin = indexFundState.stablecoin;
         euint64 amount = TFHE.asEuint64(encryptedAmount, inputProof);
-
-        // WORKS ONLY WITH UNENCRYPTED ERROR CODES -> LET IT LIKE THIS OR FIND ANOTHER SOLUTION?
+        TFHE.allowTransient(amount, address(stablecoin));
         stablecoin.transferFrom(msg.sender, address(this), amount);
+        require(stablecoin.errorGetCounter() > 0, "No error recorded");
         uint256 transferErrorId = stablecoin.errorGetCounter() - 1;
-        uint8 tramsferErrorCode = stablecoin.getErrorCodeForTransferId(transferErrorId);
-        uint8 noErrorCode = uint8(ConfidentialERC20WithTransparentErrors.ErrorCodes.NO_ERROR);
-        if (tramsferErrorCode != noErrorCode) {
-            revert TransferFailed();
-        }
-
-        uint256[] memory cts = new uint256[](1);
-        cts[0] = Gateway.toUint256(amount);
-        uint256 requestID =
-            Gateway.requestDecryption(cts, this.mintSharesCallback.selector, 0, block.timestamp + 100, false);
+        euint8 transferErrorCode = stablecoin.getErrorCodeForTransferId(transferErrorId);
+        uint256[] memory cts = new uint256[](2);
+        cts[0] = Gateway.toUint256(transferErrorCode);
+        cts[1] = Gateway.toUint256(amount);
+        uint256 requestID = Gateway.requestDecryption(
+            cts,
+            this.mintSharesCallback.selector,
+            0,
+            block.timestamp + 100,
+            false
+        );
         addParamsAddress(requestID, msg.sender);
     }
 
@@ -154,194 +128,156 @@ contract ConfidentialIndexFund is
      * @param encryptedRedeemIndexTokens The encrypted flag indicating whether to redeem index tokens.
      * @param inputProof The proof for the encrypted amount.
      */
-    function burnShares(einput encryptedAmount, einput encryptedRedeemIndexTokens, bytes calldata inputProof)
-        external
-        nonReentrant
-    {
+    function burnShares(
+        einput encryptedAmount,
+        einput encryptedRedeemIndexTokens,
+        bytes calldata inputProof
+    ) external nonReentrant {
         euint64 amount = TFHE.asEuint64(encryptedAmount, inputProof);
         ebool redeemIndexTokens = TFHE.asEbool(encryptedRedeemIndexTokens, inputProof);
-        euint64 encryptedIndexTokenBalance = indexFundToken.balanceOf(msg.sender);
+        IndexFundToken indexFundToken = indexFundState.indexFundToken;
+
+        euint64 encryptedIndexTokenBalance = indexFundToken.balanceOfAllow(msg.sender);
 
         ebool hasUserEnoughSharesToBurn = TFHE.le(amount, encryptedIndexTokenBalance);
 
         // Transfer the shares to be burned from the user to this contract.
+        TFHE.allowTransient(amount, address(indexFundToken));
         indexFundToken.transferFrom(msg.sender, address(this), amount);
         uint256 transferErrorId = indexFundToken.errorGetCounter() - 1;
-        uint8 tramsferErrorCode = indexFundToken.getErrorCodeForTransferId(transferErrorId);
-        uint8 noErrorCode = uint8(ConfidentialERC20WithTransparentErrors.ErrorCodes.NO_ERROR);
-        if (tramsferErrorCode != noErrorCode) {
-            revert TransferFailed();
-        }
+        euint8 transferErrorCode = indexFundToken.getErrorCodeForTransferId(transferErrorId);
 
-        uint256[] memory cts = new uint256[](3);
-        cts[0] = Gateway.toUint256(amount);
-        cts[1] = Gateway.toUint256(redeemIndexTokens);
-        cts[2] = Gateway.toUint256(hasUserEnoughSharesToBurn);
-        uint256 requestID =
-            Gateway.requestDecryption(cts, this.burnSharesCallback.selector, 0, block.timestamp + 100, false);
+        uint256[] memory cts = new uint256[](4);
+        cts[0] = Gateway.toUint256(transferErrorCode);
+        cts[1] = Gateway.toUint256(amount);
+        cts[2] = Gateway.toUint256(redeemIndexTokens);
+        cts[3] = Gateway.toUint256(hasUserEnoughSharesToBurn);
+        uint256 requestID = Gateway.requestDecryption(
+            cts,
+            this.burnSharesCallback.selector,
+            0,
+            block.timestamp + 100,
+            false
+        );
         addParamsAddress(requestID, msg.sender);
     }
 
-    function mintSharesCallback(uint256 requestID, uint64 decryptedAmount) public nonReentrant onlyGateway {
+    function mintSharesCallback(
+        uint256 requestID,
+        uint8 transferErrorCode,
+        uint64 decryptedAmount
+    ) public nonReentrant onlyGateway {
         address[] memory params = getParamsAddress(requestID);
         address user = params[0];
-        if (decryptedAmount > MAX_AMOUNT_TO_MINT_OR_BURN) {
-            revert SharesToMintAmountTooBig(decryptedAmount);
+        ConfidentialERC20WithErrorsWrapped stablecoin = indexFundState.stablecoin;
+        uint8 noErrorCode = uint8(ConfidentialERC20WithErrors.ErrorCodes.NO_ERROR);
+        if (transferErrorCode != noErrorCode) {
+            revert EncryptedTransferFailed(
+                TFHE.asEaddress(address(stablecoin)),
+                TFHE.asEaddress(msg.sender),
+                TFHE.asEaddress(address(this)),
+                decryptedAmount
+            );
+        }
+        emit EncryptedStablecoinTransfer(
+            TFHE.asEaddress(user),
+            TFHE.asEaddress(address(this)),
+            TFHE.asEuint64(decryptedAmount)
+        );
+        if (decryptedAmount > indexFundState.MAX_AMOUNT_TO_MINT_OR_BURN) {
+            euint64 amount = TFHE.asEuint64(decryptedAmount);
+            TFHE.allowTransient(amount, address(stablecoin));
+            // Refund the user the amount of stablecoin they tried to deposit
+            stablecoin.transfer(user, amount);
+            emit SharesToMintAmountBiggerThanMax(TFHE.asEaddress(user), decryptedAmount);
         }
         stablecoin.unwrap(decryptedAmount);
-        (uint256 _totalIndexMarketCap, uint256[] memory marketCaps) =
-            IMarketDataFetcher(marketDataFetcher).getIndexMarketCaps(indexTokens);
-        totalIndexMarketCap = _totalIndexMarketCap;
-
-        uint256 feeDivisor = IndexFundFactory(indexFundFactory).feeDivisor();
-        uint256 feeAmount = decryptedAmount / feeDivisor;
-        collectedFees += feeAmount;
-        emit FeeCollected(feeAmount);
-
-        uint256 stablecoinIn = decryptedAmount - feeAmount;
-
-        uint256[] memory stablecoinAmountsToSwap =
-            computeStablecoinAmountsToSwap(stablecoinIn, _totalIndexMarketCap, marketCaps);
-
-        pendingStablecoinToTokenSwapsCounter++;
-
-        for (uint256 i = 0; i < indexTokens.length; i++) {
-            tokenToPendingStablecoinSwapsAmount[indexTokens[i]] += stablecoinAmountsToSwap[i];
-        }
-        if (pendingStablecoinToTokenSwapsCounter == 2) {
-            pendingStablecoinToTokenSwapsCounter = 0;
-            for (uint256 i = 0; i < indexTokens.length; i++) {
-                address currentlyProcessedToken = indexTokens[i];
-                PoolKey memory poolKey = poolKeys[i];
-                uint256 stablecoinAmountToSwap = tokenToPendingStablecoinSwapsAmount[currentlyProcessedToken];
-
-                uint256 decimals;
-                if (currentlyProcessedToken == address(0)) {
-                    decimals = 18;
-                } else {
-                    decimals = ERC20(currentlyProcessedToken).decimals();
-                }
-                uint256 tokenPrice = IMarketDataFetcher(marketDataFetcher).getTokenPrice(currentlyProcessedToken);
-                uint256 minAmountOut = (tokenPrice * 9 * stablecoinAmountToSwap) / 10 / (10 ** decimals);
-
-                if (stablecoinAmountToSwap > MAX_AMOUNT_TO_SWAP) {
-                    revert AmountToSwapTooBig(stablecoinAmountToSwap);
-                }
-
-                SwapsManager(swapsManagerProxy).swap(
-                    poolKey,
-                    uint128(stablecoinAmountToSwap),
-                    uint128(minAmountOut),
-                    block.timestamp + 1 minutes,
-                    true,
-                    address(stablecoin)
-                );
-            }
+        (uint256 stablecoinIn, uint256 feeCollected) = indexFundState.preprocessSwapsOnMint(decryptedAmount);
+        emit FeeCollected(TFHE.asEaddress(user), feeCollected);
+        if (indexFundState.pendingStablecoinToTokenSwapsCounter == indexFundState.numberOfSwapsToBatch) {
+            indexFundState.processSwapsOnMint();
             emit MintSwapsPerformed();
         }
-
-        uint64 sharesToMint = uint64(stablecoinIn / sharePrice);
-
-        IndexFundToken(indexFundToken).mint(user, sharesToMint);
-        emit SharesMinted(user, sharesToMint);
+        updateSharePrice();
+        require(indexFundState.sharePrice > 0, "Share price must be greater than zero");
+        uint64 sharesToMint = uint64(stablecoinIn / indexFundState.sharePrice);
+        IndexFundToken(indexFundState.indexFundToken).mint(user, sharesToMint);
+        emit SharesMinted(TFHE.asEaddress(user), sharesToMint);
     }
 
     function burnSharesCallback(
         uint256 requestID,
+        uint8 transferErrorCode,
         uint64 decryptedAmount,
         bool redeemIndexTokens,
         bool hasUserEnoughSharesToBurn
     ) public nonReentrant onlyGateway {
-        if (decryptedAmount > MAX_AMOUNT_TO_MINT_OR_BURN) {
-            revert SharesToBurnAmountTooBig(decryptedAmount);
+        uint8 noErrorCode = uint8(ConfidentialERC20WithErrors.ErrorCodes.NO_ERROR);
+        if (transferErrorCode != noErrorCode) {
+            revert EncryptedTransferFailed(
+                TFHE.asEaddress(address(indexFundState.indexFundToken)),
+                TFHE.asEaddress(msg.sender),
+                TFHE.asEaddress(address(this)),
+                decryptedAmount
+            );
+        }
+        if (decryptedAmount > indexFundState.MAX_AMOUNT_TO_MINT_OR_BURN) {
+            revert SharesToBurnAmountBiggerThanMax(TFHE.asEaddress(msg.sender), decryptedAmount);
         }
         address[] memory params = getParamsAddress(requestID);
         address user = params[0];
         if (!hasUserEnoughSharesToBurn) {
-            revert NotEnoughSharesToBurn(user, decryptedAmount);
+            revert UserShareBalanceTooSmall(TFHE.asEaddress(user), decryptedAmount);
         }
-        uint256 stablecoinToSendBack;
-        indexFundToken.burn(decryptedAmount);
-        emit SharesBurned(msg.sender, decryptedAmount);
-        for (uint256 i = 0; i < indexTokens.length; i++) {
-            address token = indexTokens[i];
-            uint256 tokenAmountToRedeemOrSwap;
-            if (token != address(0)) {
-                tokenAmountToRedeemOrSwap =
-                    (IERC20(token).balanceOf(address(this)) * decryptedAmount) / indexFundToken.totalSupply();
-            } else {
-                // Handle the case where the token is ethereum
-                tokenAmountToRedeemOrSwap = (address(this).balance * decryptedAmount) / indexFundToken.totalSupply();
+        updateSharePrice();
+        indexFundState.indexFundToken.burn(decryptedAmount);
+        emit SharesBurned(TFHE.asEaddress(msg.sender), decryptedAmount);
+        uint256[] memory tokenAmountsToRedeemOrSwap = indexFundState.computeAmountsToSwapOrRedeemOnBurn(
+            decryptedAmount
+        );
+        // If the user wants to redeem index tokens, transfer the corresponding amount.
+        if (redeemIndexTokens) {
+            indexFundState.sendTokensBackOnBurn(user, tokenAmountsToRedeemOrSwap);
+            emit IndexTokensRedeemed();
+        } else {
+            ConfidentialERC20WithErrorsWrapped stablecoin = indexFundState.stablecoin;
+            uint256 stablecoinToSendBack = indexFundState.processSwapsOnBurn(tokenAmountsToRedeemOrSwap);
+            bool sendStablecoinBack = stablecoin.transfer(user, TFHE.asEuint64(stablecoinToSendBack));
+            if (!sendStablecoinBack) {
+                revert TransferFailed(
+                    address(stablecoin),
+                    TFHE.asEaddress(address(stablecoin)),
+                    TFHE.asEaddress(user),
+                    TFHE.asEuint256(stablecoinToSendBack)
+                );
             }
-            // If the user wants to redeem index tokens, transfer the corresponding amount.
-            if (redeemIndexTokens) {
-                IERC20(token).transfer(user, tokenAmountToRedeemOrSwap);
-                emit IndexTokensRedeemed();
-            } else {
-                address currentlyProcessedToken = indexTokens[i];
-                pendingTokenToStablecoinSwapsCounter++;
-                tokenToPendingTokenSwapsAmount[currentlyProcessedToken] += tokenAmountToRedeemOrSwap;
-                if (pendingTokenToStablecoinSwapsCounter == 2) {
-                    pendingTokenToStablecoinSwapsCounter = 0;
-                    uint256 tokenAmountToSwap = tokenToPendingTokenSwapsAmount[currentlyProcessedToken];
-
-                    uint256 decimals;
-                    if (currentlyProcessedToken == address(0)) {
-                        decimals = 18;
-                    } else {
-                        decimals = ERC20(currentlyProcessedToken).decimals();
-                    }
-                    uint256 tokenPrice = IMarketDataFetcher(marketDataFetcher).getTokenPrice(currentlyProcessedToken);
-                    uint256 minAmountOut = (tokenPrice * 9 * tokenAmountToSwap) / 10 / (10 ** decimals);
-
-                    if (tokenAmountToSwap > MAX_AMOUNT_TO_SWAP) {
-                        revert AmountToSwapTooBig(tokenAmountToSwap);
-                    }
-
-                    stablecoinToSendBack += SwapsManager(swapsManagerProxy).swap(
-                        poolKeys[i],
-                        uint128(tokenAmountToRedeemOrSwap),
-                        uint128(minAmountOut),
-                        block.timestamp + 1 minutes,
-                        true,
-                        currentlyProcessedToken
-                    );
-
-                    emit BurnSwapsPerformed();
-
-                    if (stablecoinToSendBack > 0) {
-                        stablecoin.transferFrom(address(this), msg.sender, TFHE.asEuint64(stablecoinToSendBack));
-                    }
-                }
-            }
+            emit BurnSwapsPerformed();
         }
     }
 
     /**
      * @notice Computes the current value per share based on market data.
      */
-    function computeShareValue() external view returns (uint256 shareValue) {
+    function updateSharePrice() public {
         uint256 totalValue = 0;
+        address[] memory indexTokens = indexFundState.indexTokens;
         for (uint256 i = 0; i < indexTokens.length; i++) {
-            uint256 tokenPrice = IMarketDataFetcher(marketDataFetcher).getTokenPrice(indexTokens[i]);
+            uint256 tokenPrice = IMarketDataFetcher(indexFundState.marketDataFetcher).getTokenPrice(indexTokens[i]);
             uint256 tokenAmount = IERC20(indexTokens[i]).balanceOf(address(this));
-            uint256 tokenDecimals;
-            if (indexTokens[i] == address(0)) {
-                tokenDecimals = 18;
-            } else {
-                tokenDecimals = ERC20(indexTokens[i]).decimals();
-            }
-            totalValue += (tokenPrice * tokenAmount) / (10 ** tokenDecimals);
-            shareValue = totalValue / indexFundToken.totalSupply();
+            uint8 dec = ERC20(indexTokens[i]).decimals();
+            totalValue += ((tokenPrice * tokenAmount) / (10 ** dec));
+        }
+        uint256 supply = indexFundState.indexFundToken.totalSupply();
+        if (supply > 0) {
+            indexFundState.sharePrice = (totalValue * USDC_DECIMALS) / supply;
         }
     }
-
     /**
      * @notice Retrieves the list of index token addresses.
      * @return An array of addresses representing the index tokens.
      */
     function getIndexTokens() public view returns (address[] memory) {
-        return indexTokens;
+        return indexFundState.indexTokens;
     }
 
     /**
@@ -349,15 +285,22 @@ contract ConfidentialIndexFund is
      * @return The IndexFundToken contract.
      */
     function getIndexFundToken() public view returns (IndexFundToken) {
-        return indexFundToken;
+        return indexFundState.indexFundToken;
     }
 
     /**
      * @notice Retrieves the stablecoin contract used by the index fund.
      * @return The IERC20 stablecoin contract.
      */
-    function getStablecoin() public view returns (ConfidentialERC20WithTransparentErrorsWrapped) {
-        return stablecoin;
+    function getStablecoin() public view returns (ConfidentialERC20WithErrorsWrapped) {
+        return indexFundState.stablecoin;
+    }
+
+    /**
+     * @notice Retrieves the current share price
+     */
+    function getSharePrice() public view returns (uint256 sharePrice) {
+        return indexFundState.sharePrice;
     }
 
     /**
@@ -365,42 +308,13 @@ contract ConfidentialIndexFund is
      * @dev Only callable by the protocol owner and protected against reentrancy.
      */
     function sendFeesToProtocolOwner() public onlyIndexFundFactoryOwner nonReentrant {
-        require(collectedFees > 0, "No fees to send");
+        require(indexFundState.collectedFees > 0, "No fees to send");
         // Reset fees before transferring to prevent reentrancy.
-        collectedFees = 0;
-        if (!decypheredStablecoin.transfer(protocolOwner, collectedFees)) {
-            revert TransferFailed();
-        }
-    }
-
-    /**
-     * @notice Computes the distribution of stablecoin amounts to swap for each index token.
-     * @dev Calculates the swap amount for each token based on its market cap relative to the total index market cap.
-     * Also approves each token for swapping via the swaps manager.
-     * @param totalAmount The total stablecoin amount available for swaps.
-     * @param _totalIndexMarketCap The total market capitalization of the index tokens.
-     * @param marketCaps An array of market capitalizations for each index token.
-     * @return An array containing the stablecoin amount allocated for each token swap.
-     */
-    function computeStablecoinAmountsToSwap(
-        uint256 totalAmount,
-        uint256 _totalIndexMarketCap,
-        uint256[] memory marketCaps
-    ) internal returns (uint256[] memory) {
-        uint256 marketCapsLength = marketCaps.length;
+        ERC20 decryptedStablecoin = indexFundState.decryptedStablecoin;
         require(
-            marketCapsLength == indexTokens.length,
-            "Disrepancy between number of market caps and number of index tokens"
+            decryptedStablecoin.transfer(protocolOwner, indexFundState.collectedFees),
+            "Failed to send fees to protocol owner."
         );
-        uint256[] memory amounts = new uint256[](marketCaps.length);
-        for (uint256 i = 0; i < marketCapsLength; i++) {
-            // Calculate proportional swap amount.
-            amounts[i] = (totalAmount * marketCaps[i]) / _totalIndexMarketCap;
-            // Approve token for swapping with a permit valid for 1 day.
-            SwapsManager(swapsManagerProxy).approveTokenWithPermit2(
-                indexTokens[i], uint160(amounts[i]), uint48(block.timestamp + 1 days)
-            );
-        }
-        return amounts;
+        indexFundState.collectedFees = 0;
     }
 }

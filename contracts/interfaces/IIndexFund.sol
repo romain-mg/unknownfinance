@@ -6,29 +6,36 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../IndexFundToken.sol";
 import {einput} from "fhevm/lib/TFHE.sol";
 import {ConfidentialERC20Wrapped} from "@httpz-contracts/token/ERC20/ConfidentialERC20Wrapped.sol";
+import {euint64, eaddress} from "fhevm/lib/TFHE.sol";
 
 interface IIndexFund {
-    error InsufficientAllowance(address token);
+    error InsufficientAllowance(eaddress allower, address token);
 
-    error SharesToMintAmountTooBig(uint256 amountToMint);
-
-    error SharesToBurnAmountTooBig(uint256 amountToBurn);
+    error SharesToBurnAmountBiggerThanMax(eaddress burner, uint256 amountToBurn);
 
     error AmountToSwapTooBig(uint256 amountToSwap);
 
-    error TransferFailed();
+    error EncryptedTransferFailed(eaddress token, eaddress from, eaddress to, uint256 amount);
 
-    error NotEnoughSharesToBurn(address user, uint256 amountToBurn);
+    error TransferFailed(address token, eaddress from, eaddress to, euint256 amount);
 
-    event FeeCollected(uint256 indexed feeAmount);
+    error UserShareBalanceTooSmall(eaddress user, uint256 amountToBurn);
 
-    event SharesMinted(address indexed user, uint256 indexed amount);
+    event FeeCollected(eaddress user, uint256 indexed feeAmount);
 
-    event SharesBurned(address indexed user, uint256 indexed amount);
+    event SharesMinted(eaddress indexed user, uint256 indexed amount);
+
+    event SharesToMintAmountBiggerThanMax(eaddress minter, uint256 amountToBurn);
+
+    event SharesBurned(eaddress indexed user, uint256 indexed amount);
 
     event MintSwapsPerformed();
 
     event BurnSwapsPerformed();
 
     event IndexTokensRedeemed();
+
+    event EncryptedStablecoinTransfer(eaddress indexed from, eaddress indexed to, euint64 indexed amount);
+
+    event SharesMintRevertedAmountTooBig();
 }

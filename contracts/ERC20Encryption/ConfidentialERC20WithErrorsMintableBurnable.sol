@@ -2,16 +2,18 @@
 pragma solidity ^0.8.24;
 
 import "fhevm/lib/TFHE.sol";
-import {ConfidentialERC20WithTransparentErrorsMintable} from "./ConfidentialERC20WithTransparentErrorsMintable.sol";
+import {
+    ConfidentialERC20WithErrorsMintable
+} from "@httpz-contracts/token/ERC20/extensions/ConfidentialERC20WithErrorsMintable.sol";
+import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import { SepoliaZamaFHEVMConfig } from "fhevm/config/ZamaFHEVMConfig.sol";
 
 /**
  * @title   ConfidentialERC20WithErrorsMintable.
  * @notice  This contract inherits ConfidentialERC20WithErrors.
  * @dev     It allows an owner to mint tokens. Mint amounts are public.
  */
-abstract contract ConfidentialERC20WithTransparentErrorsMintableBurnable is
-    ConfidentialERC20WithTransparentErrorsMintable
-{
+contract ConfidentialERC20WithErrorsMintableBurnable is SepoliaZamaFHEVMConfig, ConfidentialERC20WithErrorsMintable {
     /**
      * @notice Emitted when `amount` tokens are minted to one account (`to`).
      */
@@ -22,9 +24,11 @@ abstract contract ConfidentialERC20WithTransparentErrorsMintableBurnable is
      * @param symbol_   Symbol.
      * @param owner_    Owner address.
      */
-    constructor(string memory name_, string memory symbol_, address owner_)
-        ConfidentialERC20WithTransparentErrorsMintable(name_, symbol_, owner_)
-    {}
+    constructor(
+        string memory name_,
+        string memory symbol_,
+        address owner_
+    ) ConfidentialERC20WithErrorsMintable(name_, symbol_, owner_) {}
 
     function burn(uint64 amount) public {
         _unsafeBurn(msg.sender, amount);
@@ -43,5 +47,9 @@ abstract contract ConfidentialERC20WithTransparentErrorsMintableBurnable is
         _balances[account] = newBalanceAccount;
         TFHE.allowThis(newBalanceAccount);
         TFHE.allow(newBalanceAccount, account);
+    }
+
+    function errorGetCounter() public view returns (uint256 errorsCount) {
+        errorsCount = _errorGetCounter();
     }
 }

@@ -2,16 +2,16 @@
 
 pragma solidity 0.8.26;
 
-import {ConfidentialIndexFund} from "./ConfidentialIndexFund.sol";
-import {IIndexFundFactory} from "./interfaces/IIndexFundFactory.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {PoolKey, Currency} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
-import {IndexFundToken} from "./IndexFundToken.sol";
-import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
-import {IIndexFund} from "./interfaces/IIndexFund.sol";
-import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
-import {MarketDataFetcher} from "./marketData/MarketDataFetcher.sol";
+import { ConfidentialIndexFund } from "./ConfidentialIndexFund.sol";
+import { IIndexFundFactory } from "./interfaces/IIndexFundFactory.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { PoolKey, Currency } from "@uniswap/v4-core/src/types/PoolKey.sol";
+import { CurrencyLibrary } from "@uniswap/v4-core/src/types/Currency.sol";
+import { IndexFundToken } from "./IndexFundToken.sol";
+import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
+import { IIndexFund } from "./interfaces/IIndexFund.sol";
+import { IHooks } from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import { MarketDataFetcher } from "./marketData/MarketDataFetcher.sol";
 
 contract IndexFundFactory is IIndexFundFactory, Ownable {
     mapping(bytes32 => IIndexFund) public indexTokensAndStablecoinToIndexFund;
@@ -28,9 +28,14 @@ contract IndexFundFactory is IIndexFundFactory, Ownable {
 
     uint256 public feeDivisor;
 
-    constructor(address _swapsManagerProxy, address _markerDataFetcher, uint256 _defaultSharePrice, uint256 _feeDivisor)
-        Ownable(msg.sender)
-    {
+    uint8 numberOfSwapsToBatch = 2;
+
+    constructor(
+        address _swapsManagerProxy,
+        address _markerDataFetcher,
+        uint256 _defaultSharePrice,
+        uint256 _feeDivisor
+    ) Ownable(msg.sender) {
         swapsManagerProxy = _swapsManagerProxy;
         marketDataFetcher = MarketDataFetcher(_markerDataFetcher);
         defaultSharePrice = _defaultSharePrice;
@@ -40,11 +45,16 @@ contract IndexFundFactory is IIndexFundFactory, Ownable {
      * @notice Create a new index fund
      * @dev The function first checks that a pool is referenced in the factory's pool map for each token-stablecoin pair
      * @param indexTokens The tokens that make up the index fund
+     * @param encryptedStablecoin The encrypted version of the stablecoin that the index fund is denominated in
      * @param stablecoin The stablecoin that the index fund is denominated in
      * @return The address of the new index fund
      */
 
-    function createConfidentialIndexFund(address[] memory indexTokens, address stablecoin) external returns (address) {
+    function createConfidentialIndexFund(
+        address[] memory indexTokens,
+        address encryptedStablecoin,
+        address stablecoin
+    ) external returns (address) {
         if (marketDataFetcher.getTokenDataFeed(stablecoin) == address(0)) {
             revert NoPriceFeedForToken(stablecoin);
         }
@@ -57,8 +67,9 @@ contract IndexFundFactory is IIndexFundFactory, Ownable {
             }
             bytes32 tokenStablecoinPair = keccak256(abi.encodePacked(indexTokens[i], stablecoin));
             PoolKey memory poolKey = tokenStablecoinPairToPoolKey[tokenStablecoinPair];
-            if (poolKey.currency0 == CurrencyLibrary.ADDRESS_ZERO && poolKey.currency1 == CurrencyLibrary.ADDRESS_ZERO)
-            {
+            if (
+                poolKey.currency0 == CurrencyLibrary.ADDRESS_ZERO && poolKey.currency1 == CurrencyLibrary.ADDRESS_ZERO
+            ) {
                 revert CurrencyPairNotWhitelisted(indexTokens[i], stablecoin);
             }
             poolKeys[i] = poolKey;
@@ -67,22 +78,19 @@ contract IndexFundFactory is IIndexFundFactory, Ownable {
             revert IndexFundAlreadyExists(indexTokens, stablecoin);
         }
 
-        IndexFundToken newIndexFundToken = new IndexFundToken(
-            string.concat("IndexFundToken", "_", Strings.toString(indexFundsCount)),
-            string.concat("IFT", Strings.toString(indexFundsCount))
-        );
-        ++indexFundsCount;
-
         ConfidentialIndexFund indexFund = new ConfidentialIndexFund(
             indexTokens,
+            encryptedStablecoin,
             stablecoin,
             address(this),
-            address(newIndexFundToken),
             address(marketDataFetcher),
             swapsManagerProxy,
             defaultSharePrice,
-            poolKeys
+            poolKeys,
+            numberOfSwapsToBatch,
+            indexFundsCount
         );
+        indexFundsCount++;
         indexTokensAndStablecoinToIndexFund[indexFundKey] = indexFund;
         return address(indexFund);
     }
@@ -111,11 +119,21 @@ contract IndexFundFactory is IIndexFundFactory, Ownable {
         IHooks hooks
     ) external onlyOwner {
         if (token < stablecoin) {
-            tokenStablecoinPairToPoolKey[keccak256(abi.encodePacked(token, stablecoin))] =
-                PoolKey(Currency.wrap(token), Currency.wrap(stablecoin), fee, tickSpacing, hooks);
+            tokenStablecoinPairToPoolKey[keccak256(abi.encodePacked(token, stablecoin))] = PoolKey(
+                Currency.wrap(token),
+                Currency.wrap(stablecoin),
+                fee,
+                tickSpacing,
+                hooks
+            );
         } else {
-            tokenStablecoinPairToPoolKey[keccak256(abi.encodePacked(token, stablecoin))] =
-                PoolKey(Currency.wrap(stablecoin), Currency.wrap(token), fee, tickSpacing, hooks);
+            tokenStablecoinPairToPoolKey[keccak256(abi.encodePacked(token, stablecoin))] = PoolKey(
+                Currency.wrap(stablecoin),
+                Currency.wrap(token),
+                fee,
+                tickSpacing,
+                hooks
+            );
         }
     }
 
@@ -136,5 +154,7 @@ contract IndexFundFactory is IIndexFundFactory, Ownable {
         feeDivisor = newFeeDivisor;
     }
 
-    function setProtocolFee(uint256 newFeeDivisor) external onlyOwner {}
+    function setNumberOfSwapsToBatch(uint8 newNumberOfSwapsToBatch) external onlyOwner {
+        numberOfSwapsToBatch = newNumberOfSwapsToBatch;
+    }
 }

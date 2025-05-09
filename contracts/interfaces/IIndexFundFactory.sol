@@ -10,8 +10,4 @@ interface IIndexFundFactory {
     error NoPriceFeedForToken(address token);
 
     error IndexFundAlreadyExists(address[] indexTokens, address stablecoin);
-
-    function createConfidentialIndexFund(address[] memory _indexTokens, address _stablecoin)
-        external
-        returns (address);
 }
