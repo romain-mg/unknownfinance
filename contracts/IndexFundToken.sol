@@ -13,10 +13,10 @@ contract IndexFundToken is SepoliaZamaFHEVMConfig, ConfidentialERC20WithErrorsMi
     /// @notice Constructor to initialize the token's name and symbol, and set up the owner
     /// @param name_ The name of the token
     /// @param symbol_ The symbol of the token
-    constructor(
-        string memory name_,
-        string memory symbol_
-    ) ConfidentialERC20WithErrorsMintableBurnable(name_, symbol_, msg.sender) {}
+    constructor(string memory name_, string memory symbol_)
+        ConfidentialERC20WithErrorsMintableBurnable(name_, symbol_, msg.sender)
+    {}
+
     function balanceOfAllow(address account) public returns (euint64) {
         euint64 balance = _balances[account];
         TFHE.allowTransient(balance, msg.sender);

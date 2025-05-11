@@ -3,11 +3,11 @@ pragma solidity ^0.8.24;
 
 import "fhevm/lib/TFHE.sol";
 import "fhevm/gateway/GatewayCaller.sol";
-import { IERC20Metadata } from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { ReentrancyGuardTransient } from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
-import { IConfidentialERC20Wrapped } from "@httpz-contracts/token/ERC20/IConfidentialERC20Wrapped.sol";
-import { ConfidentialERC20Base } from "./ConfidentialERC20Base.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
+import {IConfidentialERC20Wrapped} from "@httpz-contracts/token/ERC20/IConfidentialERC20Wrapped.sol";
+import {ConfidentialERC20Base} from "./ConfidentialERC20Base.sol";
 
 /**
  * @title   ConfidentialERC20Wrapped.
@@ -70,15 +70,10 @@ abstract contract CustomConfidentialERC20Wrapped is
         uint256[] memory cts = new uint256[](1);
         cts[0] = Gateway.toUint256(canUnwrap);
 
-        uint256 requestId = Gateway.requestDecryption(
-            cts,
-            this.callbackUnwrap.selector,
-            0,
-            block.timestamp + 100,
-            false
-        );
+        uint256 requestId =
+            Gateway.requestDecryption(cts, this.callbackUnwrap.selector, 0, block.timestamp + 100, false);
 
-        unwrapRequests[requestId] = UnwrapRequest({ account: msg.sender, amount: amount });
+        unwrapRequests[requestId] = UnwrapRequest({account: msg.sender, amount: amount});
     }
 
     /**
@@ -135,12 +130,11 @@ abstract contract CustomConfidentialERC20Wrapped is
         }
     }
 
-    function _transferNoEvent(
-        address from,
-        address to,
-        euint64 amount,
-        ebool isTransferable
-    ) internal virtual override {
+    function _transferNoEvent(address from, address to, euint64 amount, ebool isTransferable)
+        internal
+        virtual
+        override
+    {
         _canTransferOrUnwrap(from);
         super._transferNoEvent(from, to, amount, isTransferable);
     }
