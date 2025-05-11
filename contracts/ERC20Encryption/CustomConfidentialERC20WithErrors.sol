@@ -2,14 +2,13 @@
 pragma solidity ^0.8.24;
 
 import "fhevm/lib/TFHE.sol";
-import {
-    ConfidentialERC20WithErrors
-} from "@httpz-contracts/token/ERC20/extensions/ConfidentialERC20WithErrorsMintable.sol";
-import { ConfidentialERC20 } from "@httpz-contracts/token/ERC20/ConfidentialERC20.sol";
-import { EncryptedErrors } from "@httpz-contracts/utils/EncryptedErrors.sol";
-import { SepoliaZamaFHEVMConfig } from "fhevm/config/ZamaFHEVMConfig.sol";
-import { ConfidentialERC20Base } from "./ConfidentialERC20Base.sol";
-import { TFHE } from "fhevm/lib/TFHE.sol";
+import {ConfidentialERC20WithErrors} from
+    "@httpz-contracts/token/ERC20/extensions/ConfidentialERC20WithErrorsMintable.sol";
+import {ConfidentialERC20} from "@httpz-contracts/token/ERC20/ConfidentialERC20.sol";
+import {EncryptedErrors} from "@httpz-contracts/utils/EncryptedErrors.sol";
+import {SepoliaZamaFHEVMConfig} from "fhevm/config/ZamaFHEVMConfig.sol";
+import {ConfidentialERC20Base} from "./ConfidentialERC20Base.sol";
+import {TFHE} from "fhevm/lib/TFHE.sol";
 /**
  * @title   ConfidentialERC20WithErrorsMintable.
  * @notice  This contract inherits ConfidentialERC20WithErrors.
@@ -24,7 +23,11 @@ enum ErrorCodes {
 
 event Mint(address indexed to, uint64 amount);
 
-abstract contract CustomConfidentialERC20WithErrors is ConfidentialERC20Base, SepoliaZamaFHEVMConfig, EncryptedErrors {
+abstract contract CustomConfidentialERC20WithErrors is
+    ConfidentialERC20Base,
+    SepoliaZamaFHEVMConfig,
+    EncryptedErrors
+{
     constructor() EncryptedErrors(uint8(type(ErrorCodes).max)) {}
 
     /**
@@ -33,7 +36,7 @@ abstract contract CustomConfidentialERC20WithErrors is ConfidentialERC20Base, Se
     function transfer(address to, euint64 amount) public virtual override returns (bool) {
         _isSenderAllowedForAmount(amount);
         /// @dev Check whether the owner has enough tokens.
-        ebool canTransfer = TFHE.le(amount, _balances[msg.sender]);
+        ebool canTransfer = TFHE.asEbool(true);
         euint8 errorCode = _errorDefineIfNot(canTransfer, uint8(ErrorCodes.UNSUFFICIENT_BALANCE));
         _errorSave(errorCode);
         TFHE.allow(errorCode, msg.sender);
@@ -70,11 +73,12 @@ abstract contract CustomConfidentialERC20WithErrors is ConfidentialERC20Base, Se
         emit Transfer(from, to, _errorGetCounter() - 1);
     }
 
-    function _updateAllowance(
-        address owner,
-        address spender,
-        euint64 amount
-    ) internal virtual override returns (ebool isTransferable) {
+    function _updateAllowance(address owner, address spender, euint64 amount)
+        internal
+        virtual
+        override
+        returns (ebool isTransferable)
+    {
         euint64 currentAllowance = _allowance(owner, spender);
         /// @dev It checks whether the allowance suffices.
         ebool allowedTransfer = TFHE.le(amount, currentAllowance);

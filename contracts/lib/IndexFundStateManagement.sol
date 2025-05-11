@@ -101,6 +101,7 @@ library IndexFundStateManagement {
     {
         address[] memory indexTokens = self.indexTokens;
         uint256 sharesEmitted = self.indexFundToken.totalSupply();
+        tokenAmountsToRedeemOrSwap = new uint256[](indexTokens.length);
         for (uint256 i = 0; i < indexTokens.length; i++) {
             address token = indexTokens[i];
             uint256 tokenAmountToRedeemOrSwap;

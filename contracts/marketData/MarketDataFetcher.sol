@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
-import { IMarketDataFetcher } from "../interfaces/IMarketDataFetcher.sol";
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import {IMarketDataFetcher} from "../interfaces/IMarketDataFetcher.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract MarketDataFetcher is IMarketDataFetcher, Ownable {
     uint256 public ETH_TOTAL_SUPPLY = 120_450_000;
@@ -23,9 +23,11 @@ contract MarketDataFetcher is IMarketDataFetcher, Ownable {
      * @return totalMarketCap The aggregated market capitalization.
      * @return individualMarketCaps Array of market capitalization values for each token.
      */
-    function getIndexMarketCaps(
-        address[] calldata indexTokenAddresses
-    ) external view returns (uint256 totalMarketCap, uint256[] memory individualMarketCaps) {
+    function getIndexMarketCaps(address[] calldata indexTokenAddresses)
+        external
+        view
+        returns (uint256 totalMarketCap, uint256[] memory individualMarketCaps)
+    {
         totalMarketCap = 0;
         individualMarketCaps = new uint256[](indexTokenAddresses.length);
         for (uint256 i = 0; i < indexTokenAddresses.length; i++) {
@@ -71,7 +73,7 @@ contract MarketDataFetcher is IMarketDataFetcher, Ownable {
         if (dataFeed == address(0)) {
             revert DataFeedDoesNotExist(token, true);
         }
-        (, int256 answer, , , ) = AggregatorV3Interface(dataFeed).latestRoundData();
+        (, int256 answer,,,) = AggregatorV3Interface(dataFeed).latestRoundData();
         uint8 feedDecimals = AggregatorV3Interface(dataFeed).decimals();
         // price6 = (rawAnswer × 1e6) / feedDecimals
         return (uint256(answer) * USDC_DECIMALS) / (10 ** feedDecimals);

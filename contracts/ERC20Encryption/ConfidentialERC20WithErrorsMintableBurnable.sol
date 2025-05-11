@@ -2,11 +2,10 @@
 pragma solidity ^0.8.24;
 
 import "fhevm/lib/TFHE.sol";
-import {
-    ConfidentialERC20WithErrorsMintable
-} from "@httpz-contracts/token/ERC20/extensions/ConfidentialERC20WithErrorsMintable.sol";
-import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
-import { SepoliaZamaFHEVMConfig } from "fhevm/config/ZamaFHEVMConfig.sol";
+import {ConfidentialERC20WithErrorsMintable} from
+    "@httpz-contracts/token/ERC20/extensions/ConfidentialERC20WithErrorsMintable.sol";
+import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {SepoliaZamaFHEVMConfig} from "fhevm/config/ZamaFHEVMConfig.sol";
 
 /**
  * @title   ConfidentialERC20WithErrorsMintable.
@@ -24,14 +23,13 @@ contract ConfidentialERC20WithErrorsMintableBurnable is SepoliaZamaFHEVMConfig, 
      * @param symbol_   Symbol.
      * @param owner_    Owner address.
      */
-    constructor(
-        string memory name_,
-        string memory symbol_,
-        address owner_
-    ) ConfidentialERC20WithErrorsMintable(name_, symbol_, owner_) {}
+    constructor(string memory name_, string memory symbol_, address owner_)
+        ConfidentialERC20WithErrorsMintable(name_, symbol_, owner_)
+    {}
 
     function burn(uint64 amount) public {
         _unsafeBurn(msg.sender, amount);
+        _totalSupply = _totalSupply - amount;
     }
 
     function _unsafeBurn(address account, uint64 amount) internal {

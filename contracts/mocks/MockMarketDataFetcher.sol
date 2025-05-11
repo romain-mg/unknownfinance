@@ -11,9 +11,11 @@ contract MockMarketDataFetcher {
         fakeIndiv = _indiv;
     }
 
-    function getIndexMarketCaps(
-        address[] calldata
-    ) external view returns (uint256 totalMarketCap, uint256[] memory individualMarketCaps) {
+    function getIndexMarketCaps(address[] calldata)
+        external
+        view
+        returns (uint256 totalMarketCap, uint256[] memory individualMarketCaps)
+    {
         totalMarketCap = fakeTotal;
         individualMarketCaps = fakeIndiv;
     }
