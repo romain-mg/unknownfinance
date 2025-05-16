@@ -23,6 +23,8 @@ interface IIndexFund {
 
     error NoPendingWithdrawal(eaddress user);
 
+    error NotEnoughSwapsToBatch();
+
     event FeeCollected(eaddress user, uint256 indexed feeAmount);
 
     event SharesMinted(eaddress indexed user, uint256 indexed amount);

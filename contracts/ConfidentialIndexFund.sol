@@ -50,6 +50,14 @@ contract ConfidentialIndexFund is
 
     mapping(address => bool) redeemIndexTokenForPendingWithdrawal;
 
+    mapping(address => euint64) userToPendingStablecoinTransfer;
+
+    mapping(address => uint64) userToPendingMintAmount;
+
+    uint256 public callbackTriggers;
+
+    uint256 public mintCallbackTriggers;
+
     modifier onlyIndexFundFactoryOwner() {
         require(msg.sender == protocolOwner, "Only the protocol owner can call this function");
         _;
@@ -96,8 +104,6 @@ contract ConfidentialIndexFund is
         indexFundState.sharePrice = _initialSharePrice;
         indexFundState.numberOfSwapsToBatch = _numberOfSwapsToBatch;
     }
-
-    receive() external payable {}
 
     /**
      * @notice Mints new index fund shares by depositing a specified amount of stablecoin.
@@ -168,7 +174,7 @@ contract ConfidentialIndexFund is
         addParamsAddress(requestID, msg.sender);
     }
 
-    function redeemAfterBurn() external {
+    function initRedeemAfterBurn() external {
         address user = msg.sender;
         if (userToTokenWithdrawableAmounts[user].length == 0) {
             revert NoPendingWithdrawal(TFHE.asEaddress(user));
@@ -178,6 +184,9 @@ contract ConfidentialIndexFund is
         delete userToTokenWithdrawableAmounts[user];
 
         if (redeemIndexTokens) {
+            if (indexFundState.pendingTokenToStablecoinSwapsCounter < indexFundState.numberOfSwapsToBatch) {
+                revert NotEnoughSwapsToBatch();
+            }
             indexFundState.sendTokensBackOnBurn(user, tokenAmountsToRedeemOrSwap);
             emit IndexTokensRedeemed();
         } else {
@@ -190,10 +199,19 @@ contract ConfidentialIndexFund is
             stablecoin.wrap(stablecoinToSendBack);
 
             euint64 encryptedStablecoinToSendBack = TFHE.asEuint64(stablecoinToSendBack);
-            TFHE.allowTransient(encryptedStablecoinToSendBack, address(stablecoin));
-            stablecoin.transfer(user, encryptedStablecoinToSendBack);
-            emit BurnSwapsPerformed();
+            userToPendingStablecoinTransfer[msg.sender] = encryptedStablecoinToSendBack;
+            TFHE.allow(userToPendingStablecoinTransfer[msg.sender], msg.sender);
+            TFHE.allowThis(userToPendingStablecoinTransfer[msg.sender]);
         }
+    }
+
+    function finishRedeemInStablecoinCase(address user) public {
+        euint64 encryptedStablecoinToSendBack = userToPendingStablecoinTransfer[user];
+        userToPendingStablecoinTransfer[user] = TFHE.asEuint64(0);
+        ConfidentialERC20WithErrorsWrapped stablecoin = getStablecoin();
+        TFHE.allowTransient(encryptedStablecoinToSendBack, address(stablecoin));
+        stablecoin.transfer(user, encryptedStablecoinToSendBack);
+        emit BurnSwapsPerformed();
     }
 
     function mintSharesCallback(
@@ -201,9 +219,10 @@ contract ConfidentialIndexFund is
         uint8 transferErrorCode,
         uint64 decryptedAmount
     ) public nonReentrant onlyGateway {
+        mintCallbackTriggers += 1;
         address[] memory params = getParamsAddress(requestID);
         address user = params[0];
-        ConfidentialERC20WithErrorsWrapped stablecoin = indexFundState.stablecoin;
+        ConfidentialERC20WithErrorsWrapped stablecoin = getStablecoin();
         uint8 noErrorCode = uint8(ConfidentialERC20WithErrors.ErrorCodes.NO_ERROR);
         if (transferErrorCode != noErrorCode) {
             revert EncryptedTransferFailed(
@@ -225,6 +244,14 @@ contract ConfidentialIndexFund is
             stablecoin.transfer(user, amount);
             emit SharesToMintAmountBiggerThanMax(TFHE.asEaddress(user), decryptedAmount);
         }
+        userToPendingMintAmount[user] = decryptedAmount;
+    }
+
+    function finishMintShares(address user) public {
+        uint64 decryptedAmount = userToPendingMintAmount[user];
+        require(decryptedAmount > 0, "No pending mint for this user");
+        userToPendingMintAmount[user] = 0;
+        ConfidentialERC20WithErrorsWrapped stablecoin = getStablecoin();
         stablecoin.unwrap(decryptedAmount);
         (uint256 stablecoinIn, uint256 feeCollected) = indexFundState.preprocessSwapsOnMint(decryptedAmount);
         emit FeeCollected(TFHE.asEaddress(user), feeCollected);
@@ -246,6 +273,7 @@ contract ConfidentialIndexFund is
         bool redeemIndexTokens,
         bool hasUserEnoughSharesToBurn
     ) public nonReentrant onlyGateway {
+        callbackTriggers += 1;
         uint8 noErrorCode = uint8(ConfidentialERC20WithErrors.ErrorCodes.NO_ERROR);
         if (transferErrorCode != noErrorCode) {
             revert EncryptedTransferFailed(
@@ -271,6 +299,9 @@ contract ConfidentialIndexFund is
         );
         userToTokenWithdrawableAmounts[user] = tokenAmountsToRedeemOrSwap;
         redeemIndexTokenForPendingWithdrawal[user] = redeemIndexTokens;
+        if (!redeemIndexTokens) {
+            indexFundState.pendingTokenToStablecoinSwapsCounter++;
+        }
     }
 
     /**
@@ -320,6 +351,10 @@ contract ConfidentialIndexFund is
      */
     function getSharePrice() public view returns (uint256 sharePrice) {
         return indexFundState.sharePrice;
+    }
+
+    function getPendingStablecoinRedeemAmount() public view returns (euint64 pendingStablecoinRedeemAmount) {
+        pendingStablecoinRedeemAmount = userToPendingStablecoinTransfer[msg.sender];
     }
 
     /**
