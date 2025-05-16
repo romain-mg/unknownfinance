@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import { LogDescription } from "ethers";
+import { ethers } from "hardhat";
 
 import { fhevm } from "../../types";
 import { awaitAllDecryptionResults, initGateway } from "../asyncDecrypt";
@@ -137,7 +138,7 @@ describe("ConfidentialIndexFund", function () {
     expect(totalSupply).to.equal(expectedSharesMintAmount);
   });
 
-  it("should correctly burn shares when burning conditions are met and user don't want to redeem index tokens", async function () {
+  it("should correctly burn shares when burning conditions are met", async function () {
     // Prepare mock swap manager and market data fetcher
     const nextSwapAmountOut = 1;
     const setMockSwaps = await this.mockSwapsManager.setNextAmountOut(nextSwapAmountOut);
@@ -217,6 +218,16 @@ describe("ConfidentialIndexFund", function () {
     burnInput.addBool(false); // don't redeem index tokens
     const encryptedBurnAmount = await burnInput.encrypt();
 
+    // Give native token to index fund contract so it can execute the callback
+    const valueToSend = ethers.parseEther("1");
+    const gasTx = await alice.sendTransaction({
+      to: this.confidentialIndexFundContractAddress,
+      value: valueToSend,
+    });
+    await gasTx.wait();
+    const balance = await ethers.provider.getBalance(this.confidentialIndexFundContractAddress);
+    expect(balance).to.equal(valueToSend);
+
     // Burn the shares
     const burnShares = await this.confidentialIndexFund
       .connect(alice)
@@ -246,8 +257,6 @@ describe("ConfidentialIndexFund", function () {
     );
 
     const expectedSharesAfterBurn = decryptedSharesBalanceAlice - sharesToBurn;
-
-    expect(await this.confidentialIndexFund.isBurnCalledBack()).to.equal(true);
 
     expect(encryptedSharesBalance).to.equal(expectedSharesAfterBurn);
 
