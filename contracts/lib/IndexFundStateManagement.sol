@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IMarketDataFetcher} from "../interfaces/IMarketDataFetcher.sol";
-import {SwapsManager} from "../swaps/SwapsManager.sol";
-import {IndexFundFactory} from "../IndexFundFactory.sol";
-import {TFHE, eaddress, euint256} from "fhevm/lib/TFHE.sol";
-import {ConfidentialIndexFund} from "../ConfidentialIndexFund.sol";
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IndexFundToken} from "../IndexFundToken.sol";
-import {ConfidentialERC20WithErrorsWrapped} from "../ERC20Encryption/ConfidentialERC20WithErrorsWrapped.sol";
-import {MarketDataFetcher} from "../marketData/MarketDataFetcher.sol";
+import { IMarketDataFetcher } from "../interfaces/IMarketDataFetcher.sol";
+import { SwapsManager } from "../swaps/SwapsManager.sol";
+import { IndexFundFactory } from "../IndexFundFactory.sol";
+import { TFHE, eaddress, euint256 } from "fhevm/lib/TFHE.sol";
+import { ConfidentialIndexFund } from "../ConfidentialIndexFund.sol";
+import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IndexFundToken } from "../IndexFundToken.sol";
+import { ConfidentialERC20WithErrorsWrapped } from "../ERC20Encryption/ConfidentialERC20WithErrorsWrapped.sol";
+import { MarketDataFetcher } from "../marketData/MarketDataFetcher.sol";
 
 library IndexFundStateManagement {
     error AmountToSwapTooBig(uint256 amount);
@@ -39,13 +39,13 @@ library IndexFundStateManagement {
         uint256 sharePrice;
     }
 
-    function preprocessSwapsOnMint(IndexFundState storage self, uint256 decryptedAmount)
-        public
-        returns (uint256 totalStablecoinIn, uint256 feeAmount)
-    {
+    function preprocessSwapsOnMint(
+        IndexFundState storage self,
+        uint256 decryptedAmount
+    ) public returns (uint256 totalStablecoinIn, uint256 feeAmount) {
         address[] memory indexTokens = self.indexTokens;
-        (uint256 _totalIndexMarketCap, uint256[] memory marketCaps) =
-            IMarketDataFetcher(self.marketDataFetcher).getIndexMarketCaps(indexTokens);
+        (uint256 _totalIndexMarketCap, uint256[] memory marketCaps) = IMarketDataFetcher(self.marketDataFetcher)
+            .getIndexMarketCaps(indexTokens);
         self.totalIndexMarketCap = _totalIndexMarketCap;
 
         uint256 feeDivisor = IndexFundFactory(self.indexFundFactory).feeDivisor();
@@ -53,8 +53,12 @@ library IndexFundStateManagement {
         self.collectedFees += feeAmount;
 
         totalStablecoinIn = decryptedAmount - feeAmount;
-        uint256[] memory stablecoinAmountsToSwap =
-            _computeAmountsToSwapOnMint(self, totalStablecoinIn, _totalIndexMarketCap, marketCaps);
+        uint256[] memory stablecoinAmountsToSwap = _computeAmountsToSwapOnMint(
+            self,
+            totalStablecoinIn,
+            _totalIndexMarketCap,
+            marketCaps
+        );
         self.pendingStablecoinToTokenSwapsCounter++;
         for (uint256 i = 0; i < indexTokens.length; i++) {
             self.tokenToPendingStablecoinSwapsAmount[indexTokens[i]] += stablecoinAmountsToSwap[i];
@@ -94,13 +98,13 @@ library IndexFundStateManagement {
         }
     }
 
-    function computeAmountsToSwapOrRedeemOnBurn(IndexFundState storage self, uint256 decryptedAmount)
-        public
-        view
-        returns (uint256[] memory tokenAmountsToRedeemOrSwap)
-    {
+    function computeAmountsToSwapOrRedeemOnBurn(
+        IndexFundState storage self,
+        uint256 decryptedAmount
+    ) public view returns (uint256[] memory tokenAmountsToRedeemOrSwap) {
         address[] memory indexTokens = self.indexTokens;
         uint256 sharesEmitted = self.indexFundToken.totalSupply();
+        require(sharesEmitted > 0, "No shares emitted");
         tokenAmountsToRedeemOrSwap = new uint256[](indexTokens.length);
         for (uint256 i = 0; i < indexTokens.length; i++) {
             address token = indexTokens[i];
@@ -116,47 +120,49 @@ library IndexFundStateManagement {
         return tokenAmountsToRedeemOrSwap;
     }
 
-    function processSwapsOnBurn(IndexFundState storage self, uint256[] memory tokenAmountsToSwap)
-        public
-        returns (uint256 stablecoinToSendBack)
-    {
+    function processSwapsOnBurn(
+        IndexFundState storage self,
+        uint256[] memory tokenAmountsToSwap
+    ) public returns (uint256 stablecoinToSendBack) {
+        require(self.pendingTokenToStablecoinSwapsCounter >= self.numberOfSwapsToBatch, "Not enough swaps to batch");
         address[] memory indexTokens = self.indexTokens;
         PoolKey[] memory poolKeys = self.poolKeys;
-        self.pendingTokenToStablecoinSwapsCounter++;
 
         for (uint256 i = 0; i < indexTokens.length; i++) {
             address currentlyProcessedToken = indexTokens[i];
             self.tokenToPendingTokenSwapsAmount[currentlyProcessedToken] += tokenAmountsToSwap[i];
         }
-
-        if (self.pendingTokenToStablecoinSwapsCounter == self.numberOfSwapsToBatch) {
-            self.pendingTokenToStablecoinSwapsCounter = 0;
-            for (uint256 i = 0; i < indexTokens.length; i++) {
-                address currentlyProcessedToken = indexTokens[i];
-                uint256 tokenAmountToSwap = self.tokenToPendingTokenSwapsAmount[currentlyProcessedToken];
-                uint256 decimals;
-                if (currentlyProcessedToken == address(0)) {
-                    decimals = 18;
-                } else {
-                    decimals = ERC20(currentlyProcessedToken).decimals();
-                }
-                uint256 tokenPrice = IMarketDataFetcher(self.marketDataFetcher).getTokenPrice(currentlyProcessedToken);
-                uint256 minAmountOut = (tokenPrice * 9 * tokenAmountToSwap) / 10 / (10 ** decimals);
-                if (tokenAmountToSwap > self.MAX_AMOUNT_TO_SWAP) {
-                    revert AmountToSwapTooBig(tokenAmountToSwap);
-                }
-
-                stablecoinToSendBack += SwapsManager(self.swapsManagerProxy).swap(
-                    poolKeys[i],
-                    uint128(tokenAmountToSwap),
-                    uint128(minAmountOut),
-                    block.timestamp + 1 minutes,
-                    true,
-                    currentlyProcessedToken
-                );
+        self.pendingTokenToStablecoinSwapsCounter = 0;
+        for (uint256 i = 0; i < indexTokens.length; i++) {
+            address currentlyProcessedToken = indexTokens[i];
+            uint256 tokenAmountToSwap = self.tokenToPendingTokenSwapsAmount[currentlyProcessedToken];
+            uint256 decimals;
+            if (currentlyProcessedToken == address(0)) {
+                decimals = 18;
+            } else {
+                decimals = ERC20(currentlyProcessedToken).decimals();
             }
+            uint256 tokenPrice = IMarketDataFetcher(self.marketDataFetcher).getTokenPrice(currentlyProcessedToken);
+            uint256 minAmountOut = (tokenPrice * 9 * tokenAmountToSwap) / 10 / (10 ** decimals);
+            if (tokenAmountToSwap > self.MAX_AMOUNT_TO_SWAP) {
+                revert AmountToSwapTooBig(tokenAmountToSwap);
+            }
+
+            stablecoinToSendBack += SwapsManager(self.swapsManagerProxy).swap(
+                poolKeys[i],
+                uint128(tokenAmountToSwap),
+                uint128(minAmountOut),
+                block.timestamp + 1 minutes,
+                true,
+                currentlyProcessedToken
+            );
         }
     }
+
+    function computeStablecoinToSendBack(
+        IndexFundState storage self,
+        uint256[] memory tokenAmountsToSwap
+    ) public returns (uint256 stablecoinToSendBack) {}
 
     function sendTokensBackOnBurn(
         IndexFundState storage self,
@@ -168,7 +174,7 @@ library IndexFundStateManagement {
             address token = tokens[i];
             uint256 amountToRedeem = tokenAmountsToRedeemOrSwap[i];
             if (token == address(0)) {
-                (bool transfer,) = user.call{value: amountToRedeem}("");
+                (bool transfer, ) = user.call{ value: amountToRedeem }("");
                 if (!transfer) {
                     revert TransferFailed(
                         address(0),
@@ -181,7 +187,10 @@ library IndexFundStateManagement {
                 bool transfer = IERC20(token).transfer(user, tokenAmountsToRedeemOrSwap[i]);
                 if (!transfer) {
                     revert TransferFailed(
-                        token, TFHE.asEaddress(address(this)), TFHE.asEaddress(user), TFHE.asEuint256(amountToRedeem)
+                        token,
+                        TFHE.asEaddress(address(this)),
+                        TFHE.asEaddress(user),
+                        TFHE.asEuint256(amountToRedeem)
                     );
                 }
             }
@@ -214,7 +223,9 @@ library IndexFundStateManagement {
             amounts[i] = (totalAmount * marketCaps[i]) / _totalIndexMarketCap;
             // Approve token for swapping with a permit valid for 1 day.
             SwapsManager(self.swapsManagerProxy).approveTokenWithPermit2(
-                self.indexTokens[i], uint160(amounts[i]), uint48(block.timestamp + 1 days)
+                self.indexTokens[i],
+                uint160(amounts[i]),
+                uint48(block.timestamp + 1 days)
             );
         }
         return amounts;
