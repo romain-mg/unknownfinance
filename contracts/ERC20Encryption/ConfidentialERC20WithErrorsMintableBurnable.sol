@@ -9,8 +9,8 @@ import {SepoliaZamaFHEVMConfig} from "fhevm/config/ZamaFHEVMConfig.sol";
 
 /**
  * @title   ConfidentialERC20WithErrorsMintable.
- * @notice  This contract inherits ConfidentialERC20WithErrors.
- * @dev     It allows an owner to mint tokens. Mint amounts are public.
+ * @notice  This contract inherits ConfidentialERC20WithErrorsMintable.
+ * @dev     It allows an owner to mint tokens and users to burn tokens. Mint amounts are public.
  */
 contract ConfidentialERC20WithErrorsMintableBurnable is SepoliaZamaFHEVMConfig, ConfidentialERC20WithErrorsMintable {
     /**

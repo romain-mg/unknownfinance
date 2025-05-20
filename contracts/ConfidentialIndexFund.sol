@@ -1,33 +1,58 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import { IIndexFund } from "./interfaces/IIndexFund.sol";
-import { IndexFundToken } from "./IndexFundToken.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
-import { IndexFundFactory } from "./IndexFundFactory.sol";
-import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
-import { IMarketDataFetcher } from "./interfaces/IMarketDataFetcher.sol";
-import { SwapsManager } from "./swaps/SwapsManager.sol";
-import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import { TFHE, euint64, ebool, einput } from "fhevm/lib/TFHE.sol";
-import {
-    ConfidentialERC20WithErrorsMintableBurnable
-} from "./ERC20Encryption/ConfidentialERC20WithErrorsMintableBurnable.sol";
-import { ConfidentialERC20WithErrorsWrapped } from "./ERC20Encryption/ConfidentialERC20WithErrorsWrapped.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { MarketDataFetcher } from "./marketData/MarketDataFetcher.sol";
+import {IIndexFund} from "./interfaces/IIndexFund.sol";
+import {IndexFundToken} from "./IndexFundToken.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {IndexFundFactory} from "./IndexFundFactory.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {IMarketDataFetcher} from "./interfaces/IMarketDataFetcher.sol";
+import {SwapsManager} from "./swaps/SwapsManager.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {TFHE, euint64, ebool, einput} from "fhevm/lib/TFHE.sol";
+import {ConfidentialERC20WithErrorsMintableBurnable} from
+    "./ERC20Encryption/ConfidentialERC20WithErrorsMintableBurnable.sol";
+import {ConfidentialERC20WithErrorsWrapped} from "./ERC20Encryption/ConfidentialERC20WithErrorsWrapped.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {MarketDataFetcher} from "./marketData/MarketDataFetcher.sol";
 import "fhevm/lib/TFHE.sol";
-import { SepoliaZamaFHEVMConfig } from "fhevm/config/ZamaFHEVMConfig.sol";
-import { SepoliaZamaGatewayConfig } from "fhevm/config/ZamaGatewayConfig.sol";
-import { ConfidentialERC20WithErrors } from "@httpz-contracts/token/ERC20/extensions/ConfidentialERC20WithErrors.sol";
+import {SepoliaZamaFHEVMConfig} from "fhevm/config/ZamaFHEVMConfig.sol";
+import {SepoliaZamaGatewayConfig} from "fhevm/config/ZamaGatewayConfig.sol";
+import {ConfidentialERC20WithErrors} from "@httpz-contracts/token/ERC20/extensions/ConfidentialERC20WithErrors.sol";
 import "fhevm/gateway/GatewayCaller.sol";
-import { IndexFundStateManagement } from "./lib/IndexFundStateManagement.sol";
-import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
+import {IndexFundStateManagement} from "./lib/IndexFundStateManagement.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 /**
- * @title IndexFund
- * @notice This contract implements an index fund where users can mint shares by depositing stablecoin.
+ * @title ConfidentialIndexFund
+ * @notice Implements a confidential index fund that enables private investment in a basket of tokens
+ * @dev This contract provides a privacy-preserving way to invest in multiple tokens through a single
+ * index fund. It uses Fully Homomorphic Encryption (FHE) to maintain confidentiality of user balances,
+ * transactions, and fund operations.
+ *
+ * Key features:
+ * - Confidential minting and burning of index fund shares
+ * - Private stablecoin deposits and withdrawals
+ * - Encrypted balance tracking and transfers
+ * - Automatic token swaps based on market cap weights
+ * - Support for both index token and stablecoin redemption paths
+ * - Integration with Uniswap V4 for token swaps
+ * - Market data integration for price feeds and market caps
+ *
+ * Security features:
+ * - Reentrancy protection
+ * - Access control for administrative functions
+ * - Encrypted state management
+ * - Gateway-based decryption for sensitive operations
+ * - Batch processing for swaps to enhance privacy
+ *
+ * The contract maintains privacy while providing full functionality of a traditional index fund,
+ * allowing users to:
+ * 1. Deposit stablecoins to mint index fund shares
+ * 2. Burn shares to redeem either underlying tokens or stablecoins
+ * 3. Track their encrypted balances and transactions
+ * 4. Participate in the fund without revealing their positions
  */
 contract ConfidentialIndexFund is
     IIndexFund,
@@ -123,13 +148,8 @@ contract ConfidentialIndexFund is
         uint256[] memory cts = new uint256[](2);
         cts[0] = Gateway.toUint256(transferErrorCode);
         cts[1] = Gateway.toUint256(amount);
-        uint256 requestID = Gateway.requestDecryption(
-            cts,
-            this.mintSharesCallback.selector,
-            0,
-            block.timestamp + 100,
-            false
-        );
+        uint256 requestID =
+            Gateway.requestDecryption(cts, this.mintSharesCallback.selector, 0, block.timestamp + 100, false);
         addParamsAddress(requestID, msg.sender);
     }
 
@@ -140,11 +160,10 @@ contract ConfidentialIndexFund is
      * @param encryptedRedeemIndexTokens The encrypted flag indicating whether to redeem index tokens.
      * @param inputProof The proof for the encrypted amount.
      */
-    function burnShares(
-        einput encryptedAmount,
-        einput encryptedRedeemIndexTokens,
-        bytes calldata inputProof
-    ) external nonReentrant {
+    function burnShares(einput encryptedAmount, einput encryptedRedeemIndexTokens, bytes calldata inputProof)
+        external
+        nonReentrant
+    {
         euint64 amount = TFHE.asEuint64(encryptedAmount, inputProof);
         ebool redeemIndexTokens = TFHE.asEbool(encryptedRedeemIndexTokens, inputProof);
         IndexFundToken indexFundToken = indexFundState.indexFundToken;
@@ -164,16 +183,17 @@ contract ConfidentialIndexFund is
         cts[1] = Gateway.toUint256(amount);
         cts[2] = Gateway.toUint256(redeemIndexTokens);
         cts[3] = Gateway.toUint256(hasUserEnoughSharesToBurn);
-        uint256 requestID = Gateway.requestDecryption(
-            cts,
-            this.burnSharesCallback.selector,
-            0,
-            block.timestamp + 100,
-            false
-        );
+        uint256 requestID =
+            Gateway.requestDecryption(cts, this.burnSharesCallback.selector, 0, block.timestamp + 100, false);
         addParamsAddress(requestID, msg.sender);
     }
 
+    /**
+     * @notice Initiates the redemption process after burning shares.
+     * @dev This function handles both index token redemption and stablecoin redemption paths.
+     * For stablecoin redemption, it processes swaps and prepares the stablecoin for transfer.
+     * For index token redemption, it sends the tokens back directly.
+     */
     function initRedeemAfterBurn() external {
         address user = msg.sender;
         if (userToTokenWithdrawableAmounts[user].length == 0) {
@@ -205,6 +225,11 @@ contract ConfidentialIndexFund is
         }
     }
 
+    /**
+     * @notice Completes the stablecoin redemption process by transferring the stablecoin to the user.
+     * @dev This function transfers the encrypted stablecoin amount that was prepared in initRedeemAfterBurn.
+     * @param user The address of the user to receive the stablecoin
+     */
     function finishRedeemInStablecoinCase(address user) public {
         euint64 encryptedStablecoinToSendBack = userToPendingStablecoinTransfer[user];
         userToPendingStablecoinTransfer[user] = TFHE.asEuint64(0);
@@ -214,11 +239,19 @@ contract ConfidentialIndexFund is
         emit BurnSwapsPerformed();
     }
 
-    function mintSharesCallback(
-        uint256 requestID,
-        uint8 transferErrorCode,
-        uint64 decryptedAmount
-    ) public nonReentrant onlyGateway {
+    /**
+     * @notice Callback function for the mint shares operation.
+     * @dev This function is called by the gateway after decryption of the mint amount.
+     * It handles the actual minting of shares and processing of the stablecoin deposit.
+     * @param requestID The ID of the decryption request
+     * @param transferErrorCode The error code from the stablecoin transfer
+     * @param decryptedAmount The decrypted amount of stablecoin to mint shares for
+     */
+    function mintSharesCallback(uint256 requestID, uint8 transferErrorCode, uint64 decryptedAmount)
+        public
+        nonReentrant
+        onlyGateway
+    {
         mintCallbackTriggers += 1;
         address[] memory params = getParamsAddress(requestID);
         address user = params[0];
@@ -233,9 +266,7 @@ contract ConfidentialIndexFund is
             );
         }
         emit EncryptedStablecoinTransfer(
-            TFHE.asEaddress(user),
-            TFHE.asEaddress(address(this)),
-            TFHE.asEuint64(decryptedAmount)
+            TFHE.asEaddress(user), TFHE.asEaddress(address(this)), TFHE.asEuint64(decryptedAmount)
         );
         if (decryptedAmount > indexFundState.MAX_AMOUNT_TO_MINT_OR_BURN) {
             euint64 amount = TFHE.asEuint64(decryptedAmount);
@@ -247,6 +278,11 @@ contract ConfidentialIndexFund is
         userToPendingMintAmount[user] = decryptedAmount;
     }
 
+    /**
+     * @notice Completes the mint shares process by processing the decrypted amount.
+     * @dev This function handles the unwrapping of stablecoin and processing of swaps after the callback.
+     * @param user The address of the user who initiated the mint
+     */
     function finishMintShares(address user) public {
         uint64 decryptedAmount = userToPendingMintAmount[user];
         require(decryptedAmount > 0, "No pending mint for this user");
@@ -294,9 +330,7 @@ contract ConfidentialIndexFund is
         updateSharePrice();
         indexFundState.indexFundToken.burn(decryptedAmount);
         emit SharesBurned(TFHE.asEaddress(msg.sender), decryptedAmount);
-        uint256[] memory tokenAmountsToRedeemOrSwap = indexFundState.computeAmountsToSwapOrRedeemOnBurn(
-            decryptedAmount
-        );
+        uint256[] memory tokenAmountsToRedeemOrSwap = indexFundState.computeAmountsToSwapOrRedeemOnBurn(decryptedAmount);
         userToTokenWithdrawableAmounts[user] = tokenAmountsToRedeemOrSwap;
         redeemIndexTokenForPendingWithdrawal[user] = redeemIndexTokens;
         if (!redeemIndexTokens) {
@@ -353,6 +387,10 @@ contract ConfidentialIndexFund is
         return indexFundState.sharePrice;
     }
 
+    /**
+     * @notice Retrieves the pending stablecoin amount for redemption for the caller.
+     * @return pendingStablecoinRedeemAmount The encrypted amount of stablecoin pending for redemption
+     */
     function getPendingStablecoinRedeemAmount() public view returns (euint64 pendingStablecoinRedeemAmount) {
         pendingStablecoinRedeemAmount = userToPendingStablecoinTransfer[msg.sender];
     }

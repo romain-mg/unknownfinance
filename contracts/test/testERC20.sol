@@ -11,11 +11,11 @@ contract TestErc20 is ERC20, Ownable {
         _mint(to, amount);
     }
 
-    function decimals() public view override returns (uint8) {
+    function decimals() public pure override returns (uint8) {
         return 6;
     }
 
-    function totalSupply() public view override returns (uint256) {
+    function totalSupply() public pure override returns (uint256) {
         return 1e6;
     }
 }

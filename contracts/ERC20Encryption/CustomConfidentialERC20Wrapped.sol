@@ -12,6 +12,7 @@ import {ConfidentialERC20Base} from "./ConfidentialERC20Base.sol";
 /**
  * @title   ConfidentialERC20Wrapped.
  * @notice  This contract allows users to wrap/unwrap trustlessly ERC20 tokens to ConfidentialERC20 tokens.
+ * It inherits ConfidentialERC20Base to allow implementation contracts to inherit both from ConfidentialERC20WithErrors and ConfidentialERC20Wrapped.
  * @dev     This implementation does not support tokens with rebase functions or tokens with a fee on transfer.
  *          All ERC20 tokens must have decimals superior or equal to 6 decimals.
  */

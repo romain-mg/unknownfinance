@@ -13,6 +13,13 @@ import {IIndexFund} from "./interfaces/IIndexFund.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {MarketDataFetcher} from "./marketData/MarketDataFetcher.sol";
 
+/**
+ * @title IndexFundFactory
+ * @notice Factory contract for creating and managing confidential index funds.
+ * @dev This contract is responsible for creating new index funds, managing token-stablecoin pairs,
+ * and maintaining global parameters for all index funds. It ensures that only valid token pairs
+ * with proper price feeds can be used in index funds.
+ */
 contract IndexFundFactory is IIndexFundFactory, Ownable {
     mapping(bytes32 => IIndexFund) public indexTokensAndStablecoinToIndexFund;
 
@@ -30,6 +37,12 @@ contract IndexFundFactory is IIndexFundFactory, Ownable {
 
     uint8 numberOfSwapsToBatch = 2;
 
+    /**
+     * @param _swapsManagerProxy Address of the swaps manager contract
+     * @param _markerDataFetcher Address of the market data fetcher contract
+     * @param _defaultSharePrice Initial share price for new index funds
+     * @param _feeDivisor Divisor used to calculate fees for new index funds
+     */
     constructor(address _swapsManagerProxy, address _markerDataFetcher, uint256 _defaultSharePrice, uint256 _feeDivisor)
         Ownable(msg.sender)
     {
@@ -139,6 +152,10 @@ contract IndexFundFactory is IIndexFundFactory, Ownable {
         feeDivisor = newFeeDivisor;
     }
 
+    /**
+     * @notice Updates the number of swaps that need to be batched before processing.
+     * @param newNumberOfSwapsToBatch The new number of swaps to batch
+     */
     function setNumberOfSwapsToBatch(uint8 newNumberOfSwapsToBatch) external onlyOwner {
         numberOfSwapsToBatch = newNumberOfSwapsToBatch;
     }

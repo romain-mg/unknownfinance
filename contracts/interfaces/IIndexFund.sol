@@ -4,9 +4,9 @@ pragma solidity 0.8.26;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../IndexFundToken.sol";
-import { einput } from "fhevm/lib/TFHE.sol";
-import { ConfidentialERC20Wrapped } from "@httpz-contracts/token/ERC20/ConfidentialERC20Wrapped.sol";
-import { euint64, eaddress } from "fhevm/lib/TFHE.sol";
+import {einput} from "fhevm/lib/TFHE.sol";
+import {ConfidentialERC20Wrapped} from "@httpz-contracts/token/ERC20/ConfidentialERC20Wrapped.sol";
+import {euint64, eaddress} from "fhevm/lib/TFHE.sol";
 
 interface IIndexFund {
     error InsufficientAllowance(eaddress allower, address token);
