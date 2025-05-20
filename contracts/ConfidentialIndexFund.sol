@@ -1,28 +1,29 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {IIndexFund} from "./interfaces/IIndexFund.sol";
-import {IndexFundToken} from "./IndexFundToken.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {IndexFundFactory} from "./IndexFundFactory.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import {IMarketDataFetcher} from "./interfaces/IMarketDataFetcher.sol";
-import {SwapsManager} from "./swaps/SwapsManager.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {TFHE, euint64, ebool, einput} from "fhevm/lib/TFHE.sol";
-import {ConfidentialERC20WithErrorsMintableBurnable} from
-    "./ERC20Encryption/ConfidentialERC20WithErrorsMintableBurnable.sol";
-import {ConfidentialERC20WithErrorsWrapped} from "./ERC20Encryption/ConfidentialERC20WithErrorsWrapped.sol";
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {MarketDataFetcher} from "./marketData/MarketDataFetcher.sol";
+import { IIndexFund } from "./interfaces/IIndexFund.sol";
+import { IndexFundToken } from "./IndexFundToken.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
+import { IndexFundFactory } from "./IndexFundFactory.sol";
+import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
+import { IMarketDataFetcher } from "./interfaces/IMarketDataFetcher.sol";
+import { SwapsManager } from "./swaps/SwapsManager.sol";
+import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import { TFHE, euint64, ebool, einput } from "fhevm/lib/TFHE.sol";
+import {
+    ConfidentialERC20WithErrorsMintableBurnable
+} from "./ERC20Encryption/ConfidentialERC20WithErrorsMintableBurnable.sol";
+import { ConfidentialERC20WithErrorsWrapped } from "./ERC20Encryption/ConfidentialERC20WithErrorsWrapped.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { MarketDataFetcher } from "./marketData/MarketDataFetcher.sol";
 import "fhevm/lib/TFHE.sol";
-import {SepoliaZamaFHEVMConfig} from "fhevm/config/ZamaFHEVMConfig.sol";
-import {SepoliaZamaGatewayConfig} from "fhevm/config/ZamaGatewayConfig.sol";
-import {ConfidentialERC20WithErrors} from "@httpz-contracts/token/ERC20/extensions/ConfidentialERC20WithErrors.sol";
+import { SepoliaZamaFHEVMConfig } from "fhevm/config/ZamaFHEVMConfig.sol";
+import { SepoliaZamaGatewayConfig } from "fhevm/config/ZamaGatewayConfig.sol";
+import { ConfidentialERC20WithErrors } from "@httpz-contracts/token/ERC20/extensions/ConfidentialERC20WithErrors.sol";
 import "fhevm/gateway/GatewayCaller.sol";
-import {IndexFundStateManagement} from "./lib/IndexFundStateManagement.sol";
-import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import { IndexFundStateManagement } from "./lib/IndexFundStateManagement.sol";
+import { Strings } from "@openzeppelin/contracts/utils/Strings.sol";
 
 /**
  * @title ConfidentialIndexFund
@@ -78,10 +79,6 @@ contract ConfidentialIndexFund is
     mapping(address => euint64) userToPendingStablecoinTransfer;
 
     mapping(address => uint64) userToPendingMintAmount;
-
-    uint256 public callbackTriggers;
-
-    uint256 public mintCallbackTriggers;
 
     modifier onlyIndexFundFactoryOwner() {
         require(msg.sender == protocolOwner, "Only the protocol owner can call this function");
@@ -148,8 +145,13 @@ contract ConfidentialIndexFund is
         uint256[] memory cts = new uint256[](2);
         cts[0] = Gateway.toUint256(transferErrorCode);
         cts[1] = Gateway.toUint256(amount);
-        uint256 requestID =
-            Gateway.requestDecryption(cts, this.mintSharesCallback.selector, 0, block.timestamp + 100, false);
+        uint256 requestID = Gateway.requestDecryption(
+            cts,
+            this.mintSharesCallback.selector,
+            0,
+            block.timestamp + 100,
+            false
+        );
         addParamsAddress(requestID, msg.sender);
     }
 
@@ -160,10 +162,11 @@ contract ConfidentialIndexFund is
      * @param encryptedRedeemIndexTokens The encrypted flag indicating whether to redeem index tokens.
      * @param inputProof The proof for the encrypted amount.
      */
-    function burnShares(einput encryptedAmount, einput encryptedRedeemIndexTokens, bytes calldata inputProof)
-        external
-        nonReentrant
-    {
+    function burnShares(
+        einput encryptedAmount,
+        einput encryptedRedeemIndexTokens,
+        bytes calldata inputProof
+    ) external nonReentrant {
         euint64 amount = TFHE.asEuint64(encryptedAmount, inputProof);
         ebool redeemIndexTokens = TFHE.asEbool(encryptedRedeemIndexTokens, inputProof);
         IndexFundToken indexFundToken = indexFundState.indexFundToken;
@@ -183,8 +186,13 @@ contract ConfidentialIndexFund is
         cts[1] = Gateway.toUint256(amount);
         cts[2] = Gateway.toUint256(redeemIndexTokens);
         cts[3] = Gateway.toUint256(hasUserEnoughSharesToBurn);
-        uint256 requestID =
-            Gateway.requestDecryption(cts, this.burnSharesCallback.selector, 0, block.timestamp + 100, false);
+        uint256 requestID = Gateway.requestDecryption(
+            cts,
+            this.burnSharesCallback.selector,
+            0,
+            block.timestamp + 100,
+            false
+        );
         addParamsAddress(requestID, msg.sender);
     }
 
@@ -247,12 +255,11 @@ contract ConfidentialIndexFund is
      * @param transferErrorCode The error code from the stablecoin transfer
      * @param decryptedAmount The decrypted amount of stablecoin to mint shares for
      */
-    function mintSharesCallback(uint256 requestID, uint8 transferErrorCode, uint64 decryptedAmount)
-        public
-        nonReentrant
-        onlyGateway
-    {
-        mintCallbackTriggers += 1;
+    function mintSharesCallback(
+        uint256 requestID,
+        uint8 transferErrorCode,
+        uint64 decryptedAmount
+    ) public nonReentrant onlyGateway {
         address[] memory params = getParamsAddress(requestID);
         address user = params[0];
         ConfidentialERC20WithErrorsWrapped stablecoin = getStablecoin();
@@ -266,7 +273,9 @@ contract ConfidentialIndexFund is
             );
         }
         emit EncryptedStablecoinTransfer(
-            TFHE.asEaddress(user), TFHE.asEaddress(address(this)), TFHE.asEuint64(decryptedAmount)
+            TFHE.asEaddress(user),
+            TFHE.asEaddress(address(this)),
+            TFHE.asEuint64(decryptedAmount)
         );
         if (decryptedAmount > indexFundState.MAX_AMOUNT_TO_MINT_OR_BURN) {
             euint64 amount = TFHE.asEuint64(decryptedAmount);
@@ -309,7 +318,6 @@ contract ConfidentialIndexFund is
         bool redeemIndexTokens,
         bool hasUserEnoughSharesToBurn
     ) public nonReentrant onlyGateway {
-        callbackTriggers += 1;
         uint8 noErrorCode = uint8(ConfidentialERC20WithErrors.ErrorCodes.NO_ERROR);
         if (transferErrorCode != noErrorCode) {
             revert EncryptedTransferFailed(
@@ -330,7 +338,9 @@ contract ConfidentialIndexFund is
         updateSharePrice();
         indexFundState.indexFundToken.burn(decryptedAmount);
         emit SharesBurned(TFHE.asEaddress(msg.sender), decryptedAmount);
-        uint256[] memory tokenAmountsToRedeemOrSwap = indexFundState.computeAmountsToSwapOrRedeemOnBurn(decryptedAmount);
+        uint256[] memory tokenAmountsToRedeemOrSwap = indexFundState.computeAmountsToSwapOrRedeemOnBurn(
+            decryptedAmount
+        );
         userToTokenWithdrawableAmounts[user] = tokenAmountsToRedeemOrSwap;
         redeemIndexTokenForPendingWithdrawal[user] = redeemIndexTokens;
         if (!redeemIndexTokens) {
