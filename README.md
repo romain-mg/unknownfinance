@@ -4,11 +4,11 @@
 
 Unknown Finance is a privacy-preserving index fund protocol built on Ethereum that enables users to invest in a basket of tokens while maintaining complete confidentiality of their positions and transactions. The protocol leverages Fully Homomorphic Encryption (FHE) to provide unprecedented privacy in DeFi index fund investments.
 
-## Key Features
+## Features
 
 ### Privacy-Preserving Operations
 - Confidential minting and burning of index fund shares
-- Private stablecoin deposits and withdrawals
+- Private stablecoin deposits and withdrawals thanks to wrapping
 - Encrypted balance tracking and transfers
 - Hidden transaction amounts and user positions
 
