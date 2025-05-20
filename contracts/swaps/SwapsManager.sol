@@ -17,6 +17,13 @@ import {PoolKey, Currency} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {ISwapsManager} from "../interfaces/ISwapsManager.sol";
 import {equals, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 
+/**
+ * @title SwapsManager
+ * @notice Manages token swaps using Uniswap V4 and Universal Router
+ * @dev This contract handles the execution of swaps between tokens and stablecoins,
+ * including permit2 approvals and swap execution through Uniswap V4 pools.
+ * It is upgradeable and ownable for administrative control.
+ */
 contract SwapsManager is Initializable, UUPSUpgradeable, OwnableUpgradeable, ISwapsManager {
     UniversalRouter public router;
 
@@ -24,11 +31,27 @@ contract SwapsManager is Initializable, UUPSUpgradeable, OwnableUpgradeable, ISw
 
     IPermit2 public permit2;
 
+    /**
+     * @notice Approves a token for spending by the permit2 contract
+     * @param token The address of the token to approve
+     * @param amount The amount to approve
+     * @param expiration The expiration timestamp for the approval
+     */
     function approveTokenWithPermit2(address token, uint160 amount, uint48 expiration) external {
         IERC20(token).approve(address(permit2), type(uint256).max);
         permit2.approve(token, address(router), amount, expiration);
     }
 
+    /**
+     * @notice Executes a swap between tokens using Uniswap V4
+     * @param key The pool key containing the token pair information
+     * @param amountIn The amount of input token to swap
+     * @param minAmountOut The minimum amount of output token to receive
+     * @param deadline The deadline for the swap execution
+     * @param stablecoinForToken Whether the swap is from stablecoin to token
+     * @param stablecoinAddress The address of the stablecoin
+     * @return amountOut The amount of output token received
+     */
     function swap(
         PoolKey calldata key,
         uint128 amountIn,
@@ -98,6 +121,12 @@ contract SwapsManager is Initializable, UUPSUpgradeable, OwnableUpgradeable, ISw
         return amountOut;
     }
 
+    /**
+     * @notice Initializes the contract with required addresses
+     * @param _router The address of the Universal Router
+     * @param _poolManager The address of the Uniswap V4 Pool Manager
+     * @param _permit2 The address of the Permit2 contract
+     */
     function initialize(address _router, address _poolManager, address _permit2) public initializer {
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
@@ -106,5 +135,9 @@ contract SwapsManager is Initializable, UUPSUpgradeable, OwnableUpgradeable, ISw
         permit2 = IPermit2(_permit2);
     }
 
+    /**
+     * @notice Authorizes an upgrade to a new implementation
+     * @param newImplementation The address of the new implementation
+     */
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 }

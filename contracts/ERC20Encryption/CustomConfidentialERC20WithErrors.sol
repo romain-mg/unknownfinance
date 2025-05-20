@@ -10,9 +10,8 @@ import {SepoliaZamaFHEVMConfig} from "fhevm/config/ZamaFHEVMConfig.sol";
 import {ConfidentialERC20Base} from "./ConfidentialERC20Base.sol";
 import {TFHE} from "fhevm/lib/TFHE.sol";
 /**
- * @title   ConfidentialERC20WithErrorsMintable.
- * @notice  This contract inherits ConfidentialERC20WithErrors.
- * @dev     It allows an owner to mint tokens. Mint amounts are public.
+ * @title   CustomConfidentialERC20WithErrors.
+ * @notice  This contract inherits ConfidentialERC20Base to allow implementation contracts to inherit both from ConfidentialERC20WithErrors and ConfidentialERC20Wrapped.
  */
 
 enum ErrorCodes {
@@ -20,8 +19,6 @@ enum ErrorCodes {
     UNSUFFICIENT_BALANCE,
     UNSUFFICIENT_APPROVAL
 }
-
-event Mint(address indexed to, uint64 amount);
 
 abstract contract CustomConfidentialERC20WithErrors is
     ConfidentialERC20Base,
