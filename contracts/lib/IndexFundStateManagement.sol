@@ -84,6 +84,11 @@ library IndexFundStateManagement {
             address currentlyProcessedToken = indexTokens[i];
             PoolKey memory poolKey = poolKeys[i];
             uint256 stablecoinAmountToSwap = self.tokenToPendingStablecoinSwapsAmount[currentlyProcessedToken];
+            SwapsManager(self.swapsManagerProxy).approveTokenWithPermit2(
+                currentlyProcessedToken,
+                uint160(stablecoinAmountToSwap),
+                uint48(block.timestamp + 1 days)
+            );
             self.decryptedStablecoin.transfer(self.swapsManagerProxy, stablecoinAmountToSwap);
             uint256 decimals;
             if (currentlyProcessedToken == address(0)) {
@@ -180,6 +185,11 @@ library IndexFundStateManagement {
                     currentlyProcessedToken
                 );
             } else {
+                SwapsManager(self.swapsManagerProxy).approveTokenWithPermit2(
+                    currentlyProcessedToken,
+                    uint160(tokenAmountToSwap),
+                    uint48(block.timestamp + 1 days)
+                );
                 IERC20(currentlyProcessedToken).transfer(self.swapsManagerProxy, tokenAmountToSwap);
                 stablecoinToSendBack += SwapsManager(self.swapsManagerProxy).swap(
                     poolKeys[i],
